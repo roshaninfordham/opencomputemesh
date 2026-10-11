@@ -484,9 +484,6 @@ Known runtime quirk: with Ollama 0.17.7, `qwen3:4b` ignores `think: false` and e
 
 ## License
 
-Apache-2.0. Section 3 of the license gives every user a patent license from each contributor and ends it
-for anyone who sues over patents in the work. Everything here is published with dated commits and
-releases, which makes it prior art against later patent claims on these designs.
-
-
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE). Section 3 of the license gives every user a patent license from each
+contributor and ends it for anyone who sues over patents in the work. Everything here is published with
+dated commits and releases, which makes it prior art against later patent claims on these designs.
