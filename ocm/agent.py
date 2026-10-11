@@ -13,6 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import httpx
 import psutil
 import websockets
 
@@ -66,6 +67,15 @@ def gpu_inventory() -> list[dict]:
         except ValueError:
             pass
     return []
+
+
+def is_loopback_url(url: str) -> bool:
+    """Parsed, not string-matched: `http://127.0.0.1@evil.com` connects to evil.com."""
+    try:
+        u = httpx.URL(url)
+    except httpx.InvalidURL:
+        return False
+    return u.scheme in ("http", "https") and u.host in ("127.0.0.1", "localhost", "::1") and not u.userinfo
 
 
 def prompt_token() -> str:
@@ -271,8 +281,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--max-jobs", type=int, default=1)
     p.add_argument("--heartbeat", type=int, default=int(os.environ.get("OCM_NODE_HEARTBEAT_INTERVAL_SECONDS", 20)))
     a = p.parse_args(argv)
-    host = a.ollama.split("://", 1)[-1].split("/", 1)[0].rsplit(":", 1)[0]
-    if host not in ("127.0.0.1", "localhost", "[::1]"):
+    if not is_loopback_url(a.ollama):
         raise SystemExit("Refusing a non-loopback Ollama URL: the runtime must stay on this machine.")
     state_dir = Path(a.state_dir).expanduser()
     saved = json.loads((state_dir / "node.json").read_text()) if (state_dir / "node.json").exists() else {}

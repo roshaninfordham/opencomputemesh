@@ -2,7 +2,7 @@
 
 import pytest
 
-from ocm.agent import build_hello, prompt_token
+from ocm.agent import build_hello, is_loopback_url, prompt_token
 from ocm.runtime import OllamaAdapter
 
 
@@ -30,3 +30,14 @@ def test_ollama_client_ignores_proxy_env(monkeypatch):
     monkeypatch.setenv("HTTPS_PROXY", "http://10.9.9.9:1")
     client = OllamaAdapter().client
     assert client.trust_env is False and not client._mounts  # no proxy transport mounted
+
+
+@pytest.mark.parametrize("url,ok", [
+    ("http://127.0.0.1:11434", True), ("http://localhost:11434", True), ("http://[::1]:11434", True),
+    ("https://localhost", True), ("http://LOCALHOST:11434/", True),
+    ("http://127.0.0.1:11434@evil.com", False), ("http://u:p@localhost:11434", False),
+    ("http://127.0.0.1.evil.com:11434", False), ("http://localhost.evil.com", False), ("http://10.0.0.5:11434", False),
+    ("ftp://localhost", False), ("127.0.0.1:11434", False), ("http://[::1", False), ("", False),
+])
+def test_loopback_url(url, ok):
+    assert is_loopback_url(url) is ok
