@@ -25,6 +25,22 @@ These screenshots come from real runs against `qwen2.5:1.5b` on Ollama 0.17.7. E
 
 The comparison shown ran both nodes on the same Mac, so it demonstrates the mechanics, not a hardware difference.
 
+## Architecture at a glance
+
+<p align="center"><img src="docs/images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator; node agents dial out and run models through pluggable runtime adapters; SQLite ledger, Tiger Data metrics and Sentry monitoring" width="100%"></p>
+
+Each layer is a slot with one interface. The box borders show what is built and verified, what is built but needs credentials to verify live, and what is only an extension point.
+
+| Layer | Default | Also built | Status |
+|---|---|---|---|
+| Model runtime | Ollama on `127.0.0.1` (`ocm/runtime.py` `OllamaAdapter`) | Gemini API (`GeminiAdapter`, `ocm-agent --runtime gemini`) | Ollama verified end to end. Gemini is unit-tested against the documented API format; a live run needs `GEMINI_API_KEY`. |
+| Node agent | Python `ocm-agent` | Rust `ocm-node` (single binary) | Both verified against the coordinator, including over a public `wss://` tunnel. |
+| Jobs and ledger | SQLite in WAL mode | n/a (Postgres is an extension point) | Verified. |
+| Time-series metrics | Off | Tiger Data / TimescaleDB sink (`ocm/timeseries.py`, `OCM_TIMESCALE_URL`): hypertable `ocm_job_metrics`, continuous aggregate `ocm_job_metrics_1m`, compression policy, live throughput chart | Verified against TimescaleDB 2.30 locally; not yet against a hosted Tiger Cloud service. |
+| Error monitoring | Logs | Sentry (`ocm/observability.py`, `SENTRY_DSN`), with scrubbers that drop prompts, outputs, cookies, tokens and join codes | Scrubbing verified through the real SDK with an in-memory transport; live delivery needs a DSN. |
+
+Snowflake and Nimble are not integrated.
+
 ## Components
 
 | Part | Code | What it does |
