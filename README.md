@@ -153,18 +153,27 @@ For frontend work, `scripts/dev.sh` runs the coordinator on port 8000 and the Vi
 
 ```mermaid
 flowchart LR
-  B[Browser web app<br/>phone or laptop] -->|HTTPS + /ws/client| C
-  API[API client] -->|/v1/chat/completions| C
-  C[Coordinator<br/>FastAPI, one process] --> DB[(SQLite WAL<br/>jobs + append-only ledger)]
-  C -->|every finished job| TS[(Tiger Data / TimescaleDB<br/>hypertable ocm_job_metrics)]
-  TS --> CA[continuous aggregate<br/>ocm_job_metrics_1m] --> CH[/api/v1/network/throughput<br/>live chart in the app/]
-  C -->|errors, after scrubbing<br/>prompts and secrets| SE[Sentry]
-  PA[Python node agent<br/>ocm-agent] -->|outbound wss /ws/node| C
-  RA[Rust node agent<br/>ocm-node] -->|outbound wss /ws/node| C
-  PA --> AD{{RuntimeAdapter}}
-  RA --> OL
-  AD -->|127.0.0.1 only| OL[Ollama<br/>local models]
-  AD -->|streamGenerateContent<br/>key stays on node| GE[Gemini API]
+  B["Browser<br/>web app"] -- "HTTPS REST + /ws/client" --> C["Coordinator<br/>FastAPI, one process"]
+  K["API client"] -- "/v1/chat/completions<br/>Bearer API key" --> C
+  C --- D[("SQLite WAL<br/>jobs, job_events,<br/>append-only ledger")]
+
+  subgraph TIGER["Tiger Data / TimescaleDB (optional, OCM_TIMESCALE_URL)"]
+    H[("hypertable<br/>ocm_job_metrics")] --> CA[("continuous aggregate<br/>ocm_job_metrics_1m")]
+  end
+  C -. "terminal-job metrics<br/>(buffered, never prompts)" .-> H
+  CA -. "GET /api/v1/network/throughput" .-> C
+  C -. "Overview: Throughput (last hour)" .-> B
+
+  C -. "errors via scrubbers<br/>(optional, SENTRY_DSN)" .-> S["Sentry"]
+
+  subgraph NODE["Contributor machine (no inbound ports)"]
+    A1["Python agent<br/>ocm-agent"] --> RA{{"RuntimeAdapter"}}
+    A2["Rust agent<br/>ocm-node (Ollama only)"] --> O
+    RA -- "default" --> O["Ollama<br/>127.0.0.1:11434"]
+  end
+  A1 -- "outbound wss /ws/node" --> C
+  A2 -- "outbound wss /ws/node" --> C
+  RA -. "--runtime gemini (optional)<br/>streamGenerateContent,<br/>key stays on the node" .-> G["Gemini API"]
 ```
 
 The database is the source of truth for durable state. TimescaleDB, when enabled, holds a derived copy of job metrics only. Live sockets, in-flight token streams and prompts exist only in the coordinator's memory, so exactly one coordinator process must run (uvicorn is started with a single worker). The job state machine, wire messages, scheduling, and retry, timeout and cancel rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
