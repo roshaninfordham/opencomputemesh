@@ -3,6 +3,7 @@
 import pytest
 
 from ocm.agent import build_hello, prompt_token
+from ocm.runtime import OllamaAdapter
 
 
 def no_prompt():
@@ -22,3 +23,10 @@ def test_enrollment_token_survives_failed_attempt():
     # A saved credential wins over any token.
     assert build_hello({"node_id": "n", "credential": "c"}, "ocme_t", no_prompt)[0] == {
         "type": "node.auth", "node_id": "n", "credential": "c"}
+
+
+def test_ollama_client_ignores_proxy_env(monkeypatch):
+    monkeypatch.setenv("HTTP_PROXY", "http://10.9.9.9:1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://10.9.9.9:1")
+    client = OllamaAdapter().client
+    assert client.trust_env is False and not client._mounts  # no proxy transport mounted

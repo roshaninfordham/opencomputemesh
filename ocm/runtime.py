@@ -80,7 +80,8 @@ class OllamaAdapter:
     name = "ollama"
 
     def __init__(self, base_url: str = "http://127.0.0.1:11434", timeout: float = 180):
-        self.client = httpx.AsyncClient(base_url=base_url, timeout=httpx.Timeout(timeout, connect=5))
+        # trust_env=False: never route loopback runtime traffic (prompts, outputs) through HTTP(S)_PROXY.
+        self.client = httpx.AsyncClient(base_url=base_url, timeout=httpx.Timeout(timeout, connect=5), trust_env=False)
 
     async def health(self) -> str | None:
         try:
