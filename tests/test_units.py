@@ -42,6 +42,12 @@ def test_normalize_metrics():
     assert empty["tokens_per_second"] is None and empty["input_tokens"] is None
     assert empty["token_count_source"] == "partial_runtime_reported"
     assert normalize_ollama({})["token_count_source"] == "unavailable"
+    # Node-reported junk never becomes a number: bools, negatives, out of SQLite range, non-finite.
+    for bad in (True, -1, 2**63, float("inf"), float("nan"), "5"):
+        m = normalize_ollama({"prompt_eval_count": bad, "eval_count": bad, "total_duration": bad, "eval_duration": bad})
+        assert m["input_tokens"] is m["output_tokens"] is m["runtime_total_ms"] is m["tokens_per_second"] is None, bad
+        assert m["token_count_source"] == "unavailable"
+    assert normalize_ollama({"eval_count": 5, "eval_duration": True})["tokens_per_second"] is None
 
 
 TARIFF = {"input_micro_per_1k": 1_000_000, "output_micro_per_1k": 3_000_000, "min_charge_micro": 0}
@@ -197,9 +203,14 @@ def test_ledger_property_random_ops(db):
                 db.execute("UPDATE jobs SET status = 'COMPLETED' WHERE id = ?", (j["id"],))
         rep = ledger.consistency_report(db)
         assert rep["ok"], (step, rep)
-        for m in ("req", "prov"):
-            assert ledger.balance(db, m) == sum(r[0] for r in db.execute(
-                "SELECT amount_micro_occ FROM ledger WHERE member_id = ?", (m,)))
+        # Per job: at most one debit and one reward, always paired, and debit == -reward.
+        for job_id, debits, rewards, debit, reward in db.execute("""
+                SELECT job_id, SUM(entry_type = 'job_debit'), SUM(entry_type = 'provider_reward'),
+                       SUM(CASE WHEN entry_type = 'job_debit' THEN amount_micro_occ END),
+                       SUM(CASE WHEN entry_type = 'provider_reward' THEN amount_micro_occ END)
+                FROM ledger WHERE job_id IS NOT NULL GROUP BY job_id"""):
+            assert debits == rewards <= 1 and (debit is None or debit == -reward), (step, job_id)
+    assert db.execute("SELECT COUNT(*) FROM ledger WHERE entry_type = 'job_debit'").fetchone()[0] > 50  # not vacuous
     total = db.execute("SELECT SUM(amount_micro_occ) FROM ledger").fetchone()[0]
     assert total == 2_000_000 + db.execute(
         "SELECT COALESCE(SUM(amount_micro_occ),0) FROM ledger WHERE entry_type IN ('reservation','reservation_release')").fetchone()[0]

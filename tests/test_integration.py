@@ -336,7 +336,7 @@ async def test_node_reconnect_fails_jobs_of_replaced_socket(server):
     f, _ = await until(ws, "request.failed", timeout=3)  # not JOB_TIMEOUT after 5 s
     assert f["code"] == "WORKER_DISCONNECTED"
     assert balances(app, req, prov) == [100_000_000, 100_000_000]
-    await ws.close(); await ws2.close()
+    await ws.close(); await ws2.close(); await node.close()
 
 
 async def test_malformed_ws_messages_do_not_kill_sockets(server):
@@ -376,8 +376,9 @@ async def test_cancel_races_and_queued_cancel(server):
     await ws.send(start_msg())
     started, _ = await until(ws, "request.started")
     await ws.send(json.dumps({"type": "request.cancel", "request_id": started["request_id"]}))
-    while not node.cancelled[1:]:
-        await asyncio.sleep(0.02)
+    async with asyncio.timeout(10):
+        while not node.cancelled[1:]:
+            await asyncio.sleep(0.02)
     await node.close()
     c, _ = await until(ws, "request.cancelled", "request.failed", timeout=3)
     assert c["type"] == "request.cancelled" and c["receipt"]["cancel_effect"] == "worker_disconnected"

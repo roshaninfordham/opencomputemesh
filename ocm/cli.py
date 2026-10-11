@@ -36,8 +36,9 @@ def main(argv=None) -> None:
         app = create_app(s)
         print(f"Join path: /join/{app.state.join_code}", flush=True)
         # One worker only: live sockets are owned by this process. Trust X-Forwarded-* from the local tunnel.
+        # No access log: request lines carry the join code (/join/<code>) and WebSocket tickets (?ticket=).
         uvicorn.run(app, host=s.host, port=s.port, proxy_headers=True, forwarded_allow_ips="127.0.0.1",
-                    ws_max_size=1_000_000, log_level="info")
+                    ws_max_size=1_000_000, log_level="info", access_log=False)
 
 
 if __name__ == "__main__":

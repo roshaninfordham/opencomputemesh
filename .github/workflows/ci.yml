@@ -12,6 +12,7 @@ jobs:
   python:
     name: Coordinator and Python agent
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -22,6 +23,7 @@ jobs:
   rust:
     name: Rust node agent
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: crates/ocm-node
@@ -39,6 +41,7 @@ jobs:
   web:
     name: Web app
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: web

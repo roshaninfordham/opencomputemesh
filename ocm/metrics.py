@@ -8,22 +8,27 @@ def int_or_none(value) -> int | None:
     return value if type(value) is int and 0 <= value < 2**63 else None
 
 
+def _duration_ns(value) -> int | float | None:
+    """Not bool; NaN and inf fail the range check."""
+    return value if type(value) in (int, float) and 0 <= value < 2**63 else None
+
+
 def ns_to_ms(value) -> int | None:
-    return round(value / NS_PER_MS) if isinstance(value, (int, float)) and value >= 0 else None
+    value = _duration_ns(value)
+    return round(value / NS_PER_MS) if value is not None else None
 
 
 def tokens_per_second(count, duration_ns) -> float | None:
-    if isinstance(count, int) and isinstance(duration_ns, (int, float)) and duration_ns > 0:
+    count, duration_ns = int_or_none(count), _duration_ns(duration_ns)
+    if count is not None and duration_ns:
         return round(count / duration_ns * 1e9, 2)
     return None
 
 
 def normalize_ollama(final: dict) -> dict:
     """Map an Ollama `done: true` chunk to job metric fields (durations in ms)."""
-    inp = final.get("prompt_eval_count")
-    out = final.get("eval_count")
-    inp = inp if isinstance(inp, int) else None
-    out = out if isinstance(out, int) else None
+    inp = int_or_none(final.get("prompt_eval_count"))
+    out = int_or_none(final.get("eval_count"))
     return {
         "input_tokens": inp,
         "output_tokens": out,
