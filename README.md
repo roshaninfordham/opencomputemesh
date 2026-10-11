@@ -8,6 +8,16 @@ OpenComputeMesh v0.1 lets a small group pool the language models they already ru
 
 Opening the coordinator URL does not share anyone's compute. A browser that joins can only send requests. Compute is shared only when someone runs the node agent on a machine that has Ollama running and at least one model already pulled, and approves which of those models to share. The agent connects out to the coordinator over a WebSocket. It opens no inbound ports and talks to Ollama on loopback only.
 
+## What it looks like
+
+These screenshots come from real runs against `qwen2.5:1.5b` on Ollama 0.17.7. Every number is measured.
+
+| A receipt after a run | Local node vs shared network | Phone |
+|---|---|---|
+| <img src="docs/images/run-receipt.png" alt="Run page showing streamed output, a latency waterfall, runtime-reported token counts and the credit transfer" width="420"> | <img src="docs/images/local-vs-mesh.png" alt="Comparison of one run on the requester's own node and one on another worker with the same model digest" width="420"> | <img src="docs/images/mobile-run.png" alt="The run page at phone width" width="180"> |
+
+The comparison shown ran both nodes on the same Mac, so it demonstrates the mechanics, not a hardware difference.
+
 ## Components
 
 | Part | Code | What it does |
