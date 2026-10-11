@@ -68,6 +68,21 @@ def gpu_inventory() -> list[dict]:
     return []
 
 
+def prompt_token() -> str:
+    if not sys.stdin.isatty():
+        raise SystemExit("No saved credential: set OCM_ENROLLMENT_TOKEN or run interactively.")
+    return getpass.getpass("One-time enrollment token (from the Share my compute page): ")
+
+
+def build_hello(state: dict, token: str | None, prompt=prompt_token) -> tuple[dict, str | None]:
+    """First frame: node.auth with a saved credential, else node.enroll. Returns the token for the caller to keep
+    (not consumed) so a failed attempt retries with it; it is dropped only once node.registered carries a credential."""
+    if state.get("node_id") and state.get("credential"):
+        return {"type": "node.auth", "node_id": state["node_id"], "credential": state["credential"]}, token
+    token = token or prompt()
+    return {"type": "node.enroll", "enrollment_token": token.strip()}, token
+
+
 class Agent:
     def __init__(self, coordinator: str, state_dir: Path, runtime: RuntimeAdapter, models_flag: str | None,
                  name: str | None, max_jobs: int, heartbeat: int):
@@ -83,6 +98,8 @@ class Agent:
         self.send_lock = asyncio.Lock()
         self.ws = None
         self.gpus = gpu_inventory()
+        # Popped so child processes never inherit it; kept on self until enrollment succeeds.
+        self.token = os.environ.pop("OCM_ENROLLMENT_TOKEN", "").strip() or None
 
     def save(self) -> None:
         self.state_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -164,23 +181,17 @@ class Agent:
             backoff = min(backoff * 2, 60)
 
     async def session(self) -> None:
+        # Resolve the hello (possibly prompting) before connecting: the coordinator allows 15s for it.
+        hello, self.token = build_hello(self.state, self.token)
+        caps = await self.capabilities()
         async with websockets.connect(self.ws_url, max_size=2**20, open_timeout=15, ping_interval=20) as ws:
             self.ws = ws
-            caps = await self.capabilities()
-            if self.state.get("credential"):
-                hello = {"type": "node.auth", "node_id": self.state["node_id"], "credential": self.state["credential"]}
-            else:
-                token = os.environ.pop("OCM_ENROLLMENT_TOKEN", None)
-                if not token:
-                    if not sys.stdin.isatty():
-                        raise SystemExit("No saved credential: set OCM_ENROLLMENT_TOKEN or run interactively.")
-                    token = getpass.getpass("One-time enrollment token (from the Share my compute page): ")
-                hello = {"type": "node.enroll", "enrollment_token": token.strip()}
             await ws.send(json.dumps({**hello, "protocol_version": PROTOCOL_VERSION, "capabilities": caps}))
             reg = json.loads(await asyncio.wait_for(ws.recv(), timeout=15))
             if reg.get("credential"):
                 self.state.update(node_id=reg["node_id"], credential=reg["credential"], coordinator=self.coordinator)
                 self.save()
+                self.token = None  # spent; only now, so failed attempts retry with it
                 say(f"enrolled as node {reg['node_id']}; credential saved to {self.state_path} (0600)")
             say(f"online; sharing {', '.join(m['model_id'] for m in caps['models']) or 'nothing (runtime unhealthy)'}")
             hb = asyncio.create_task(self.heartbeat_loop())
