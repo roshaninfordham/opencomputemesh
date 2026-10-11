@@ -22,11 +22,19 @@ from . import ledger
 from .config import Settings
 from .db import connect, dumps, insert, new_id, now, parse_ts, row, rows, sha256, update
 from .hub import Conn, Hub, ServiceError
+from .metrics import int_or_none
 from .protocol import BenchmarkStart, ChatMessage, GenerationParams, NodeHello, RequestRef, RequestStart
 
 log = logging.getLogger("ocm")
 SESSION_COOKIE = "ocm_session"
 NETWORK_ID = "demo"
+MAX_OFFSET = 1_000_000
+# connect-src 'self' covers same-origin ws:/wss: (CSP3); bare ws:/wss: would allow any host.
+SECURITY_HEADERS = {
+    "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "x-frame-options": "DENY",
+    "content-security-policy": "default-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
+                               "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+}
 
 
 # ---------- small helpers ----------
@@ -35,9 +43,16 @@ class RateLimiter:
     # ponytail: in-process sliding window; move to a shared store if the coordinator ever scales out.
     def __init__(self):
         self.hits: dict[str, deque] = defaultdict(deque)
+        self.max_window, self.swept = 0.0, time.monotonic()
 
     def allow(self, key: str, limit: int, window: float) -> bool:
-        q, t = self.hits[key], time.monotonic()
+        t = time.monotonic()
+        self.max_window = max(self.max_window, window)
+        if t - self.swept > 60:  # drop keys (e.g. one per client IP) with no hit inside any window
+            self.swept = t
+            for k in [k for k, q in self.hits.items() if not q or q[-1] <= t - self.max_window]:
+                del self.hits[k]
+        q = self.hits[key]
         while q and q[0] <= t - window:
             q.popleft()
         if len(q) >= limit:
@@ -161,6 +176,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resp = JSONResponse({"error": {"code": "INTERNAL_ERROR", "message": "Internal server error.",
                                            "request_id": request.state.request_id}}, status_code=500)
         resp.headers["x-request-id"] = request.state.request_id
+        resp.headers.update(SECURITY_HEADERS)
         return resp
 
     def envelope(request: Request, code, message, status, details=None):
@@ -404,7 +420,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"receipt": hub.receipt(result["id"]), "output": result.get("_output")}
 
     @app.get("/api/v1/jobs")
-    def list_jobs(member=Depends(current_member), limit_: int = Query(25, alias="limit"), offset: int = 0):
+    def list_jobs(member=Depends(current_member), limit_: int = Query(25, alias="limit"), offset: int = Query(0, ge=0, le=MAX_OFFSET)):
         limit_ = max(1, min(limit_, 100))
         js = rows(db, """SELECT id FROM jobs WHERE requester_member_id = ? OR provider_member_id = ?
                          ORDER BY created_at DESC LIMIT ? OFFSET ?""", member["id"], member["id"], limit_, offset)
@@ -464,7 +480,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 "note": "Per-job CPU/GPU active time is not measured in v0.1; worker wall time and runtime-reported tokens are."}}
 
     @app.get("/api/v1/me/ledger")
-    def my_ledger(member=Depends(current_member), limit_: int = Query(50, alias="limit"), offset: int = 0):
+    def my_ledger(member=Depends(current_member), limit_: int = Query(50, alias="limit"), offset: int = Query(0, ge=0, le=MAX_OFFSET)):
         limit_ = max(1, min(limit_, 200))
         entries = rows(db, """SELECT l.id, l.job_id, l.entry_type, l.amount_micro_occ, l.tariff_version, l.created_at,
                                      l.reversal_of, l.metadata_json, j.model_id
@@ -562,6 +578,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     continue
                 try:
                     msg = json.loads(raw)
+                    if not isinstance(msg, dict):
+                        raise ValueError("not an object")
                     await handle_client_message(conn, member, msg)
                 except ServiceError as e:
                     await conn.send("request.failed" if e.code != "BENCHMARK_UNAVAILABLE" else "benchmark.failed",
@@ -637,10 +655,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return
             node_id, credential = new_id(), "ocmn_" + secrets.token_urlsafe(32)
             with db:
-                db.execute("UPDATE enrollment_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL",
-                           (now(), tok["token_hash"]))
-                insert(db, "nodes", {"id": node_id, "network_id": tok["network_id"], "owner_member_id": tok["member_id"],
-                                     "credential_hash": sha256(credential), "created_at": now(), **cap_fields})
+                claimed = db.execute("UPDATE enrollment_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL",
+                                     (now(), tok["token_hash"])).rowcount
+                if claimed:
+                    insert(db, "nodes", {"id": node_id, "network_id": tok["network_id"], "owner_member_id": tok["member_id"],
+                                         "credential_hash": sha256(credential), "created_at": now(), **cap_fields})
+            if not claimed:  # single use is enforced by the UPDATE, not the earlier read
+                await ws.close(code=4401, reason="invalid or expired enrollment token")
+                return
             await ws.send_text(json.dumps({"type": "node.registered", "node_id": node_id, "credential": credential,
                                            "protocol_version": 1, "sent_at": now()}))
         else:
@@ -665,9 +687,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     msg = json.loads(raw)
                 except ValueError:
                     continue
+                if not isinstance(msg, dict):
+                    continue
                 t = msg.get("type")
                 if t == "node.heartbeat":
-                    await hub.node_heartbeat(node_id, bool(msg.get("runtime_healthy")), msg.get("memory_available_bytes"))
+                    await hub.node_heartbeat(node_id, msg.get("runtime_healthy") is True,
+                                             int_or_none(msg.get("memory_available_bytes")))
                 elif t == "node.capabilities":
                     from .protocol import Capabilities
                     try:

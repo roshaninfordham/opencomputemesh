@@ -18,7 +18,7 @@ from fastapi import WebSocket
 from . import ledger
 from .config import Settings
 from .db import dumps, insert, new_id, now, parse_ts, row, rows, sha256, update
-from .metrics import normalize_ollama
+from .metrics import int_or_none, normalize_ollama
 from .protocol import PROTOCOL_VERSION, GenerationParams
 
 log = logging.getLogger("ocm.hub")
@@ -169,13 +169,13 @@ class Hub:
             await self.broadcast_snapshot(node["network_id"])
 
     async def node_disconnected(self, node_id: str, conn: Conn | None, grace: bool = True) -> None:
-        if conn is not None and self.nodes.get(node_id) is not conn:
-            return  # an older socket closing after replacement
-        self.nodes.pop(node_id, None)
-        for job_id in list(conn.active if conn else ()):
+        for job_id in list(conn.active if conn else ()):  # also for a replaced socket: its jobs are gone
             q = self.job_queues.get(job_id)
             if q:
                 q.put_nowait({"type": "_lost"})
+        if conn is not None and self.nodes.get(node_id) is not conn:
+            return  # an older socket closing after replacement
+        self.nodes.pop(node_id, None)
 
         async def go_offline():
             if grace:
@@ -436,8 +436,9 @@ class Hub:
         self.queued += 1
         try:
             while True:
-                if not q.empty() and q.get_nowait()["type"] == "_cancel":
-                    return "cancelled"
+                while not q.empty():  # anything but a cancel is stale from a previous attempt
+                    if q.get_nowait()["type"] == "_cancel":
+                        return "cancelled"
                 picked = self.pick_node(job["network_id"], job["model_id"], digest, exclude, pin_node)
                 if picked:
                     return picked
@@ -468,6 +469,8 @@ class Hub:
             t = ev["type"]
             if t == "job.started" and not started:
                 started = True
+                if cancel_deadline:  # started after the cancel was sent: stay CANCEL_REQUESTED
+                    continue
                 with self.db:
                     transition(self.db, job_id, "RUNNING")
                     log_event(self.db, job_id, "worker_started")
@@ -491,6 +494,8 @@ class Hub:
                     return Outcome("cancelled", started, {**ev, "cancel_effect": "runtime_stream_closed"})
                 return Outcome("failed", started or bool(ev.get("started")), ev)
             elif t == "_lost":
+                if cancel_deadline:  # the work stopped either way; the user asked for that
+                    return Outcome("cancelled", started, {"cancel_effect": "worker_disconnected"})
                 return Outcome("lost", started)
             elif t == "_cancel" and not cancel_deadline:
                 with self.db:
@@ -504,14 +509,16 @@ class Hub:
             stats = o.payload.get("final_stats") or {}
             m = normalize_ollama(stats)
             job = row(self.db, "SELECT * FROM jobs WHERE id = ?", job_id)
-            fields = {**m, "worker_elapsed_ms": o.payload.get("worker_elapsed_ms"), "completed_at": now(),
+            fields = {**m, "worker_elapsed_ms": int_or_none(o.payload.get("worker_elapsed_ms")), "completed_at": now(),
                       "end_to_end_ms": ms_since(t0)}
             with self.db:
                 if job["status"] == "DISPATCHED":
                     transition(self.db, job_id, "RUNNING")
                 if m["token_count_source"] == "runtime_reported":
                     tariff = row(self.db, "SELECT * FROM tariffs WHERE version = ?", job["tariff_version"])
-                    amount = ledger.cost_micro(tariff, m["input_tokens"], m["output_tokens"])
+                    # Usage is node-reported: never charge more than the hold the requester agreed to.
+                    # ponytail: underpays the provider if the input-token estimate was ever too low.
+                    amount = min(ledger.cost_micro(tariff, m["input_tokens"], m["output_tokens"]), job["reserved_credits"])
                     ledger.settle(self.db, job, job["provider_member_id"], amount)
                     fields.update(settled_credits=amount, settlement_status="settled")
                     log_event(self.db, job_id, "credit_settled", amount_micro_occ=amount)
@@ -530,11 +537,11 @@ class Hub:
         if o.kind == "cancelled":
             return await self._finish(job_id, "CANCELLED", "CANCELLED_BY_USER", emit, t0,
                                       cancel_effect=o.payload.get("cancel_effect"),
-                                      worker_elapsed_ms=o.payload.get("worker_elapsed_ms"))
+                                      worker_elapsed_ms=int_or_none(o.payload.get("worker_elapsed_ms")))
         if o.kind == "timeout":
             return await self._finish(job_id, "EXPIRED", "JOB_TIMEOUT", emit, t0)
         return await self._finish(job_id, "FAILED", self._failure_code(o), emit, t0,
-                                  worker_elapsed_ms=o.payload.get("worker_elapsed_ms"))
+                                  worker_elapsed_ms=int_or_none(o.payload.get("worker_elapsed_ms")))
 
     async def _finish(self, job_id, status, code, emit, t0, **extra) -> dict:
         job = row(self.db, "SELECT * FROM jobs WHERE id = ?", job_id)
@@ -558,8 +565,10 @@ class Hub:
     def route_node_event(self, node_id: str, ev: dict) -> None:
         """A node may only report on jobs dispatched to it."""
         job_id = ev.get("job_id")
+        if not isinstance(job_id, str):
+            return
         conn = self.nodes.get(node_id)
-        q = self.job_queues.get(job_id or "")
+        q = self.job_queues.get(job_id)
         if q and conn and job_id in conn.active:
             q.put_nowait(ev)
 

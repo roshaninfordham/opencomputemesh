@@ -57,7 +57,8 @@ class FakeNode:
         self.base, self.client, self.models, self.behavior, self.name = base, client, models, behavior, name
         self.jobs: list[str] = []
         self.cancelled: list[str] = []
-        self.node_id = None
+        self.node_id = self.credential = None
+        self.final = FINAL
 
     async def start(self):
         token = self.client.post("/api/v1/nodes/enrollment-tokens").json()["enrollment_token"]
@@ -65,7 +66,8 @@ class FakeNode:
         await self.ws.send(json.dumps({"type": "node.enroll", "enrollment_token": token, "capabilities": {
             "display_name": self.name, "runtime_healthy": True, "runtime_version": "fake",
             "models": [{"model_id": m, "digest": "d-" + m} for m in self.models]}}))
-        self.node_id = json.loads(await self.ws.recv())["node_id"]
+        reg = json.loads(await self.ws.recv())
+        self.node_id, self.credential = reg["node_id"], reg["credential"]
         self.task = asyncio.create_task(self.loop())
         return self
 
@@ -81,7 +83,7 @@ class FakeNode:
                     asyncio.create_task(self.run(msg["job_id"]))
                 elif msg["type"] == "job.cancel":
                     self.cancelled.append(msg["job_id"])
-                    if self.behavior != "hang_no_ack":
+                    if self.behavior not in ("hang_no_ack", "late_start"):
                         await self.send(type="job.failed", job_id=msg["job_id"], cancelled=True, started=True)
         except websockets.ConnectionClosed:
             pass
@@ -91,6 +93,12 @@ class FakeNode:
         if b == "disconnect_before_start":
             await self.ws.close()
             return
+        if b == "late_start":  # job.started crosses the coordinator's job.cancel on the wire
+            while job_id not in self.cancelled:
+                await asyncio.sleep(0.02)
+            await self.send(type="job.started", job_id=job_id)
+            await self.send(type="job.failed", job_id=job_id, cancelled=True, started=True)
+            return
         await self.send(type="job.started", job_id=job_id)
         if b.startswith("hang"):
             return
@@ -99,7 +107,7 @@ class FakeNode:
         if b == "error":
             await self.send(type="job.failed", job_id=job_id, code="RUNTIME_ERROR", started=True)
             return
-        await self.send(type="job.completed", job_id=job_id, final_stats=FINAL, worker_elapsed_ms=12)
+        await self.send(type="job.completed", job_id=job_id, final_stats=self.final, worker_elapsed_ms=12)
 
     async def close(self):
         await self.ws.close()
@@ -273,3 +281,132 @@ async def test_node_cannot_report_on_foreign_jobs(server):
     status = app.state.db.execute("SELECT status FROM jobs WHERE id = ?", (started["request_id"],)).fetchone()[0]
     assert status == "RUNNING"
     await ws.close(); await slow.close(); await rogue.close()
+
+
+# ---------- hardening ----------
+
+async def test_overreported_usage_is_capped_at_the_hold(server):
+    base, app = server
+    prov, req = member(base, "prov"), member(base, "req")
+    node = await FakeNode(base, prov, ["m1"]).start()
+    node.final = {**FINAL, "prompt_eval_count": 10**9, "eval_count": 10**9}
+    ws = await browser(base, req)
+    await ws.send(start_msg())
+    done, _ = await until(ws, "request.completed")
+    c = done["receipt"]["credits"]
+    assert c["settled_micro_occ"] == c["reserved_micro_occ"] > 0
+    assert balances(app, req, prov) == [100_000_000 - c["reserved_micro_occ"], 100_000_000 + c["reserved_micro_occ"]]
+    assert ledger.consistency_report(app.state.db)["ok"]
+    await ws.close(); await node.close()
+
+
+async def test_node_reconnect_fails_jobs_of_replaced_socket(server):
+    base, app = server
+    prov, req = member(base, "prov"), member(base, "req")
+    node = await FakeNode(base, prov, ["m1"], behavior="hang").start()
+    ws = await browser(base, req)
+    await ws.send(start_msg())
+    await until(ws, "request.started")
+    ws2 = await websockets.connect(f"ws://{base}/ws/node")
+    await ws2.send(json.dumps({"type": "node.auth", "node_id": node.node_id, "credential": node.credential,
+                               "capabilities": {"display_name": "fake", "runtime_healthy": True,
+                                                "models": [{"model_id": "m1", "digest": "d-m1"}]}}))
+    f, _ = await until(ws, "request.failed", timeout=3)  # not JOB_TIMEOUT after 5 s
+    assert f["code"] == "WORKER_DISCONNECTED"
+    assert balances(app, req, prov) == [100_000_000, 100_000_000]
+    await ws.close(); await ws2.close()
+
+
+async def test_malformed_ws_messages_do_not_kill_sockets(server):
+    base, app = server
+    prov, req = member(base, "prov"), member(base, "req")
+    node = await FakeNode(base, prov, ["m1"]).start()
+    ws = await browser(base, req)
+    await ws.send("[1]")
+    e, _ = await until(ws, "error")
+    assert e["code"] == "INVALID_MESSAGE"
+    await ws.send(json.dumps({"type": "client.ping"}))
+    await until(ws, "client.pong")
+    for raw in ("[1]", "null", json.dumps({"type": "job.token", "job_id": ["x"]})):
+        await node.ws.send(raw)
+    for mem in ("lots", {"a": 1}, 2**70, True):
+        await node.send(type="node.heartbeat", runtime_healthy=True, memory_available_bytes=mem)
+    await ws.send(start_msg())
+    await until(ws, "request.completed")  # node socket survived
+    v = app.state.db.execute("SELECT memory_available_bytes FROM nodes WHERE id = ?", (node.node_id,)).fetchone()[0]
+    assert v is None
+    await ws.close(); await node.close()
+
+
+async def test_cancel_races_and_queued_cancel(server):
+    base, app = server
+    prov, req = member(base, "prov"), member(base, "req")
+    node = await FakeNode(base, prov, ["m1"], behavior="late_start").start()
+    ws = await browser(base, req)
+    # job.started arriving after the cancel was sent must not crash the job.
+    await ws.send(start_msg())
+    routed, _ = await until(ws, "request.routed")
+    await ws.send(json.dumps({"type": "request.cancel", "request_id": routed["request_id"]}))
+    c, _ = await until(ws, "request.cancelled", "request.failed")
+    assert c["type"] == "request.cancelled" and c["receipt"]["status"] == "CANCELLED"
+    # Worker vanishing while a cancel is pending ends CANCELLED, without waiting for the ack timeout.
+    node.behavior = "hang_no_ack"
+    await ws.send(start_msg())
+    started, _ = await until(ws, "request.started")
+    await ws.send(json.dumps({"type": "request.cancel", "request_id": started["request_id"]}))
+    while not node.cancelled[1:]:
+        await asyncio.sleep(0.02)
+    await node.close()
+    c, _ = await until(ws, "request.cancelled", "request.failed", timeout=3)
+    assert c["type"] == "request.cancelled" and c["receipt"]["cancel_effect"] == "worker_disconnected"
+    # A queued job (worker busy) cancels before dispatch and returns its hold; cancelling it again is a no-op.
+    busy = await FakeNode(base, prov, ["m1"], behavior="hang").start()
+    await ws.send(start_msg())
+    await until(ws, "request.started")
+    await ws.send(start_msg())
+    created, _ = await until(ws, "request.created")
+    await until(ws, "request.queued")
+    await ws.send(json.dumps({"type": "request.cancel", "request_id": created["request_id"]}))
+    c, _ = await until(ws, "request.cancelled")
+    assert c["request_id"] == created["request_id"] and c["receipt"]["cancel_effect"] == "cancelled_before_dispatch"
+    assert c["receipt"]["node"] is None and len(busy.jobs) == 1
+    assert req.post(f"/api/v1/jobs/{created['request_id']}/cancel").json() == {"ok": True, "status": "CANCELLED"}
+    assert ledger.consistency_report(app.state.db)["ok"]
+    await ws.close(); await busy.close()
+
+
+async def test_enrollment_token_claim_is_atomic(server, monkeypatch):
+    base, app = server
+    prov = member(base, "prov")
+    token = prov.post("/api/v1/nodes/enrollment-tokens").json()["enrollment_token"]
+    db, real = app.state.db, __import__("ocm.app", fromlist=["new_id"]).new_id
+
+    def racing_new_id():  # a concurrent enroll claims the token between the read and the UPDATE
+        with db:
+            db.execute("UPDATE enrollment_tokens SET used_at = 'x'")
+        return real()
+    monkeypatch.setattr("ocm.app.new_id", racing_new_id)
+    ws = await websockets.connect(f"ws://{base}/ws/node")
+    await ws.send(json.dumps({"type": "node.enroll", "enrollment_token": token,
+                              "capabilities": {"display_name": "x", "models": []}}))
+    with pytest.raises(websockets.ConnectionClosed) as e:
+        await ws.recv()
+    assert e.value.rcvd.code == 4401
+    assert db.execute("SELECT COUNT(*) FROM nodes").fetchone()[0] == 0
+
+
+def test_http_hardening(server):
+    base, app = server
+    req = member(base, "req")
+    for path in ("/", "/api/v1/session", "/api/nope"):
+        r = req.get(path)
+        assert r.headers["x-content-type-options"] == "nosniff" and r.headers["referrer-policy"] == "no-referrer"
+        assert r.headers["x-frame-options"] == "DENY" and "frame-ancestors 'none'" in r.headers["content-security-policy"]
+    r = req.get("/api/nope")
+    assert r.status_code == 404 and r.json()["error"]["code"] == "NOT_FOUND"
+    assert req.get("/api/v1/jobs?offset=-1").status_code == 422
+    assert req.get(f"/api/v1/me/ledger?offset={10**20}").status_code == 422  # was a 500 (sqlite OverflowError)
+    assert req.get("/api/v1/jobs?limit=5").json()["limit"] == 5
+    r = req.post("/api/v1/jobs", json={"model": "m1", "idempotency_key": "k" * 8,
+                                       "messages": [{"role": "bogus", "content": "SECRET-PROMPT-123"}]})
+    assert r.status_code == 422 and "SECRET-PROMPT-123" not in r.text

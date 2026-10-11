@@ -3,6 +3,11 @@
 NS_PER_MS = 1_000_000
 
 
+def int_or_none(value) -> int | None:
+    """Node-reported integers: anything else (str, bool, float, out of SQLite range) becomes None."""
+    return value if type(value) is int and 0 <= value < 2**63 else None
+
+
 def ns_to_ms(value) -> int | None:
     return round(value / NS_PER_MS) if isinstance(value, (int, float)) and value >= 0 else None
 
