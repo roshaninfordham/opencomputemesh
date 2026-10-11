@@ -205,7 +205,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return None
         return row(db, "SELECT * FROM members WHERE session_hash = ? AND status = 'active'", sha256(token))
 
-    def current_member(request: Request) -> dict:
+    async def current_member(request: Request) -> dict:
         auth = request.headers.get("authorization", "")
         if auth.lower().startswith("bearer "):
             m = row(db, "SELECT * FROM members WHERE api_key_hash = ? AND status = 'active'", sha256(auth[7:].strip()))
@@ -255,14 +255,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/readyz")
-    def readyz():
+    async def readyz():
         db.execute("SELECT 1 FROM networks LIMIT 1").fetchone()
         return {"status": "ready", "online_nodes": len(hub.nodes), "time": now()}
 
     # ---------- session / network ----------
 
     @app.post("/api/v1/session")
-    def create_session(body: SessionIn, request: Request, response: Response):
+    async def create_session(body: SessionIn, request: Request, response: Response):
         if not origin_ok(request.headers, s):
             err("BAD_ORIGIN", "Cross-origin request rejected.", 403)
         limit(f"join:{client_ip(request.client, request.headers)}", 10, 60)
@@ -286,26 +286,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"member": member_view(row(db, "SELECT * FROM members WHERE id = ?", m["id"])), "restored": False}
 
     @app.get("/api/v1/session")
-    def get_session(request: Request):
+    async def get_session(request: Request):
         m = member_from_token(request.cookies.get(SESSION_COOKIE))
         return {"member": member_view(m) if m else None}
 
     @app.post("/api/v1/session/leave")
-    def leave(response: Response, member=Depends(current_member)):
+    async def leave(response: Response, member=Depends(current_member)):
         with db:
             update(db, "members", member["id"], {"session_hash": None})
         response.delete_cookie(SESSION_COOKIE, path="/")
         return {"ok": True}
 
     @app.post("/api/v1/session/api-key")
-    def rotate_api_key(member=Depends(current_member)):
+    async def rotate_api_key(member=Depends(current_member)):
         key = "ocm_" + secrets.token_urlsafe(32)
         with db:
             update(db, "members", member["id"], {"api_key_hash": sha256(key)})
         return {"api_key": key, "note": "Shown once. Use as `Authorization: Bearer <key>` for /v1/chat/completions."}
 
     @app.get("/api/v1/network")
-    def network(request: Request):
+    async def network(request: Request):
         m = member_from_token(request.cookies.get(SESSION_COOKIE))
         snap = hub.network_snapshot(NETWORK_ID, m["id"] if m else None)
         if not m:  # public landing view: counts and model names only
@@ -314,12 +314,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return snap
 
     @app.get("/api/v1/network/join-info")
-    def join_info(member=Depends(current_member)):
+    async def join_info(member=Depends(current_member)):
         return {"join_code": join_code, "join_path": f"/join/{join_code}",
                 "note": "Anyone with this link can join as a demo member. Share it only with the audience."}
 
     @app.post("/api/v1/ws-ticket")
-    def ws_ticket(member=Depends(current_member)):
+    async def ws_ticket(member=Depends(current_member)):
         t = secrets.token_urlsafe(24)
         tickets[t] = (member["id"], time.monotonic() + 60)
         for k, (_, exp) in list(tickets.items()):
@@ -330,7 +330,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---------- nodes ----------
 
     @app.post("/api/v1/nodes/enrollment-tokens")
-    def enrollment_token(request: Request, member=Depends(current_member)):
+    async def enrollment_token(request: Request, member=Depends(current_member)):
         limit(f"enroll:{member['id']}", 5, 600)
         token = "ocme_" + secrets.token_urlsafe(24)
         exp = parse_ts(now()).timestamp() + s.enrollment_token_ttl_seconds
@@ -342,12 +342,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"enrollment_token": token, "expires_at": expires_at, "single_use": True}
 
     @app.get("/api/v1/nodes")
-    def list_nodes(member=Depends(current_member)):
+    async def list_nodes(member=Depends(current_member)):
         return {"nodes": [hub.public_node(n, member["id"]) for n in
                           rows(db, "SELECT * FROM nodes WHERE network_id = ? ORDER BY created_at", member["network_id"])]}
 
     @app.get("/api/v1/nodes/{node_id}")
-    def get_node(node_id: str, member=Depends(current_member)):
+    async def get_node(node_id: str, member=Depends(current_member)):
         n = row(db, "SELECT * FROM nodes WHERE id = ? AND network_id = ?", node_id, member["network_id"])
         if not n:
             err("NOT_FOUND", "Node not found.", 404)
@@ -405,7 +405,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---------- models / jobs ----------
 
     @app.get("/api/v1/models")
-    def models(member=Depends(current_member)):
+    async def models(member=Depends(current_member)):
         return {"models": hub.available_models(member["network_id"])}
 
     async def run_blocking(member, params: GenerationParams, key: str, node_id=None):
@@ -420,20 +420,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"receipt": hub.receipt(result["id"]), "output": result.get("_output")}
 
     @app.get("/api/v1/jobs")
-    def list_jobs(member=Depends(current_member), limit_: int = Query(25, alias="limit"), offset: int = Query(0, ge=0, le=MAX_OFFSET)):
+    async def list_jobs(member=Depends(current_member), limit_: int = Query(25, alias="limit"), offset: int = Query(0, ge=0, le=MAX_OFFSET)):
         limit_ = max(1, min(limit_, 100))
         js = rows(db, """SELECT id FROM jobs WHERE requester_member_id = ? OR provider_member_id = ?
                          ORDER BY created_at DESC LIMIT ? OFFSET ?""", member["id"], member["id"], limit_, offset)
         return {"jobs": [hub.receipt(j["id"]) for j in js], "limit": limit_, "offset": offset}
 
     @app.get("/api/v1/jobs/{job_id}")
-    def get_job(job_id: str, member=Depends(current_member)):
+    async def get_job(job_id: str, member=Depends(current_member)):
         visible_job(member, job_id)
         events = rows(db, "SELECT event_type, occurred_at, duration_ms, safe_metadata_json FROM job_events WHERE job_id = ? ORDER BY id", job_id)
         return {"receipt": hub.receipt(job_id), "events": events}
 
     @app.get("/api/v1/jobs/{job_id}/receipt")
-    def get_receipt(job_id: str, member=Depends(current_member)):
+    async def get_receipt(job_id: str, member=Depends(current_member)):
         visible_job(member, job_id)
         return hub.receipt(job_id)
 
@@ -443,7 +443,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True, "status": row(db, "SELECT status FROM jobs WHERE id = ?", job_id)["status"]}
 
     @app.get("/api/v1/benchmarks/eligibility")
-    def benchmark_eligibility(model: str, member=Depends(current_member)):
+    async def benchmark_eligibility(model: str, member=Depends(current_member)):
         r = hub.benchmark_blocker(member, model)
         if isinstance(r, str):
             return {"available": False, "reason": r}
@@ -456,14 +456,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await hub.benchmark(member, body, body.idempotency_key)
 
     @app.get("/api/v1/benchmarks")
-    def list_benchmarks(member=Depends(current_member)):
+    async def list_benchmarks(member=Depends(current_member)):
         bs = rows(db, "SELECT * FROM benchmarks WHERE requester_member_id = ? ORDER BY created_at DESC LIMIT 20", member["id"])
         return {"benchmarks": [hub.benchmark_view(b) for b in bs]}
 
     # ---------- accounting ----------
 
     @app.get("/api/v1/me/usage")
-    def usage(member=Depends(current_member)):
+    async def usage(member=Depends(current_member)):
         q = """SELECT model_id, COUNT(*) AS jobs, SUM(status='COMPLETED') AS completed,
                       SUM(COALESCE(input_tokens,0)) AS input_tokens, SUM(COALESCE(output_tokens,0)) AS output_tokens,
                       SUM(COALESCE(worker_elapsed_ms,0)) AS worker_ms, SUM(COALESCE(settled_credits,0)) AS settled_micro_occ
@@ -480,7 +480,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 "note": "Per-job CPU/GPU active time is not measured in v0.1; worker wall time and runtime-reported tokens are."}}
 
     @app.get("/api/v1/me/ledger")
-    def my_ledger(member=Depends(current_member), limit_: int = Query(50, alias="limit"), offset: int = Query(0, ge=0, le=MAX_OFFSET)):
+    async def my_ledger(member=Depends(current_member), limit_: int = Query(50, alias="limit"), offset: int = Query(0, ge=0, le=MAX_OFFSET)):
         limit_ = max(1, min(limit_, 200))
         entries = rows(db, """SELECT l.id, l.job_id, l.entry_type, l.amount_micro_occ, l.tariff_version, l.created_at,
                                      l.reversal_of, l.metadata_json, j.model_id
@@ -500,14 +500,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---------- admin ----------
 
     @app.get("/api/v1/admin/metrics", dependencies=[Depends(require_admin)])
-    def admin_metrics():
+    async def admin_metrics():
         return {"jobs_by_status": rows(db, "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status"),
                 "members": db.execute("SELECT COUNT(*) FROM members").fetchone()[0],
                 "nodes_by_status": rows(db, "SELECT status, COUNT(*) AS n FROM nodes GROUP BY status"),
                 "connected_nodes": len(hub.nodes), "ledger_consistency": ledger.consistency_report(db)}
 
     @app.post("/api/v1/admin/pricing", dependencies=[Depends(require_admin)])
-    def add_pricing(body: PricingIn):
+    async def add_pricing(body: PricingIn):
         from decimal import Decimal, InvalidOperation
         try:
             Decimal(body.input_usd_per_million_tokens), Decimal(body.output_usd_per_million_tokens)
@@ -519,13 +519,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ref
 
     @app.post("/api/v1/admin/invites", dependencies=[Depends(require_admin)])
-    def admin_invite():
+    async def admin_invite():
         return {"join_path": f"/join/{join_code}", "join_code": join_code}
 
     # ---------- OpenAI-compatible (non-streaming subset) ----------
 
     @app.get("/v1/models")
-    def oai_models(member=Depends(current_member)):
+    async def oai_models(member=Depends(current_member)):
         return {"object": "list", "data": [{"id": m["model_id"], "object": "model", "owned_by": "opencomputemesh",
                                             "worker_count": m["worker_count"]} for m in hub.available_models(member["network_id"])]}
 

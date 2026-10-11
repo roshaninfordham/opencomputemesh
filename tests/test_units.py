@@ -223,3 +223,17 @@ def test_cli_refuses_to_invent_db_or_join_code(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as e:
         main(["check-ledger"])
     assert e.value.code == 0 and capsys.readouterr().out.startswith("abc\n")
+
+
+def test_db_routes_run_on_the_event_loop(tmp_path):
+    """Sync routes/dependencies run in a threadpool and would share the one sqlite connection across threads."""
+    import inspect
+    from ocm.app import create_app
+    app = create_app(Settings(database_path=str(tmp_path / "db.sqlite"), data_dir=str(tmp_path), join_code="c"))
+    sync = set()
+    for r in app.routes:
+        if hasattr(r, "dependant"):
+            for d in [r.dependant, *r.dependant.dependencies]:
+                if d.call and not inspect.iscoroutinefunction(d.call):
+                    sync.add(d.call.__name__)
+    assert sync <= {"healthz", "spa", "require_admin"}, sync  # these touch neither db, limiter nor tickets
