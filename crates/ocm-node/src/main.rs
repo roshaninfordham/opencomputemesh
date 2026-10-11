@@ -478,8 +478,16 @@ async fn build_agent(a: Args) -> Result<Agent> {
     })
 }
 
+/// rustls 0.23 needs a process-level crypto provider before any wss:// handshake.
+/// ring is pinned explicitly (no C/CMake toolchain needed, unlike aws-lc-rs).
+fn install_tls_provider() {
+    // Err only means a provider is already installed, which is fine.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
+    install_tls_provider();
     let args = Args::parse();
     let result = tokio::select! {
         r = async { build_agent(args).await?.run_forever().await } => r,
@@ -500,6 +508,20 @@ async fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Drives the real wss:// path (TLS config built by tokio-tungstenite) against a loopback
+    /// listener that hangs up. Must yield an error, not the "no CryptoProvider" panic.
+    #[tokio::test]
+    async fn wss_handshake_builds_tls_config_without_panic() {
+        install_tls_provider();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let _ = listener.accept().await; // accept then drop: TLS handshake fails
+        });
+        let res = tokio_tungstenite::connect_async(format!("wss://localhost:{port}/ws/node")).await;
+        assert!(res.is_err());
+    }
 
     #[test]
     fn loopback_only() {
