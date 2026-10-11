@@ -153,3 +153,158 @@ class OllamaAdapter:
             return RuntimeResult(ok=True, final_stats={k: chunk[k] for k in FINAL_STAT_KEYS if k in chunk},
                                  worker_elapsed_ms=round((time.monotonic() - start) * 1000))
         return ttft
+
+
+class SSEDecoder:
+    """Incremental server-sent events: yields each event's joined `data:` payload as JSON. Malformed events are
+    counted and skipped, not fatal."""
+
+    def __init__(self):
+        self.buf = ""
+        self.data: list[str] = []
+        self.malformed = 0
+
+    def feed(self, chunk: str) -> list[dict]:
+        self.buf += chunk
+        *lines, self.buf = self.buf.split("\n")
+        out = []
+        for line in lines:
+            line = line.rstrip("\r")
+            if line.startswith("data:"):
+                self.data.append(line[5:].removeprefix(" "))
+            elif not line and self.data:
+                payload, self.data = "\n".join(self.data), []
+                try:
+                    out.append(json.loads(payload))
+                except json.JSONDecodeError:
+                    self.malformed += 1
+        return out
+
+    def flush(self) -> list[dict]:
+        return self.feed("\n\n")
+
+
+GEMINI_FINISH = {"STOP": "stop", "MAX_TOKENS": "length"}
+
+
+def gemini_body(req: InferenceRequest) -> dict:
+    """Chat messages -> Gemini generateContent body. System turns become systemInstruction; assistant -> model."""
+    system = [m["content"] for m in req.messages if m.get("role") == "system"]
+    contents = [{"role": "model" if m.get("role") == "assistant" else "user", "parts": [{"text": m["content"]}]}
+                for m in req.messages if m.get("role") != "system"]
+    config = {"maxOutputTokens": req.max_tokens}
+    if req.temperature is not None:
+        config["temperature"] = req.temperature
+    if req.top_p is not None:
+        config["topP"] = req.top_p
+    body = {"contents": contents, "generationConfig": config}
+    if system:
+        body["systemInstruction"] = {"parts": [{"text": "\n\n".join(system)}]}
+    return body
+
+
+def gemini_final_stats(usage: dict, finish: str | None) -> dict:
+    """Only what the API reports. Gemini reports no durations, so none are invented (the UI shows Unavailable).
+    Thinking tokens are kept apart from eval_count so output-token rates stay honest."""
+    stats = {}
+    if "promptTokenCount" in usage:
+        stats["prompt_eval_count"] = usage["promptTokenCount"]
+    if "candidatesTokenCount" in usage:
+        stats["eval_count"] = usage["candidatesTokenCount"]
+    if "thoughtsTokenCount" in usage:
+        stats["thoughts_count"] = usage["thoughtsTokenCount"]
+    if finish:
+        stats["done_reason"] = GEMINI_FINISH.get(finish, finish.lower())
+    return stats
+
+
+def _api_error(resp_text: str, status: int) -> str:
+    try:
+        msg = json.loads(resp_text).get("error", {}).get("message") or resp_text
+    except (ValueError, AttributeError):
+        msg = resp_text
+    return f"runtime HTTP {status}: {str(msg)[:200]}"
+
+
+class GeminiAdapter:
+    """Google Gemini REST API. A cloud runtime: prompts leave this machine for Google. The API key travels only in
+    the x-goog-api-key header, never in a URL, a log line, or a coordinator frame."""
+
+    name = "gemini"
+    VERSION = "gemini-api-v1beta"
+
+    def __init__(self, api_key: str, base_url: str = "https://generativelanguage.googleapis.com/v1beta",
+                 timeout: float = 180, transport: httpx.AsyncBaseTransport | None = None):
+        self.client = httpx.AsyncClient(base_url=base_url, headers={"x-goog-api-key": api_key},
+                                        timeout=httpx.Timeout(timeout, connect=10), transport=transport)
+
+    async def health(self) -> str | None:
+        try:
+            r = await self.client.get("/models", params={"pageSize": 1})
+            r.raise_for_status()
+            return self.VERSION
+        except httpx.HTTPError:
+            return None
+
+    async def list_models(self) -> list[RuntimeModel]:
+        out, token = [], None
+        while True:
+            r = await self.client.get("/models", params={"pageSize": 1000, **({"pageToken": token} if token else {})})
+            r.raise_for_status()
+            data = r.json()
+            for m in data.get("models", []):
+                if "generateContent" in m.get("supportedGenerationMethods", []):
+                    out.append(RuntimeModel(model_id=m["name"].removeprefix("models/"), digest=m.get("version"),
+                                            runtime="gemini", family="gemini"))
+            token = data.get("nextPageToken")
+            if not token:
+                return out
+
+    async def generate_stream(self, req, on_token, cancel) -> RuntimeResult:
+        start = time.monotonic()
+        ttft = None
+        usage: dict = {}
+        finish = None
+        decoder = SSEDecoder()
+
+        def elapsed():
+            return round((time.monotonic() - start) * 1000)
+
+        async def handle(event) -> RuntimeResult | None:
+            nonlocal ttft, usage, finish
+            if "error" in event:
+                return RuntimeResult(ok=False, error=f"runtime error: {str(event['error'].get('message', ''))[:200]}")
+            block = (event.get("promptFeedback") or {}).get("blockReason")
+            if block:
+                return RuntimeResult(ok=False, error=f"runtime refused prompt: {block}")
+            usage = event.get("usageMetadata") or usage
+            for cand in event.get("candidates") or []:
+                finish = cand.get("finishReason") or finish
+                for part in (cand.get("content") or {}).get("parts") or []:
+                    if part.get("text") and not part.get("thought"):
+                        if ttft is None:
+                            ttft = elapsed()
+                        await on_token(part["text"])
+            return None
+
+        try:
+            async with self.client.stream("POST", f"/models/{req.model_id}:streamGenerateContent",
+                                          params={"alt": "sse"}, json=gemini_body(req)) as resp:
+                if resp.status_code != 200:
+                    return RuntimeResult(ok=False, error=_api_error((await resp.aread()).decode(errors="replace"),
+                                                                    resp.status_code))
+                async for text in resp.aiter_text():
+                    if cancel.is_set():  # leaving the context closes the stream
+                        return RuntimeResult(ok=False, cancelled=True, error="cancelled", worker_elapsed_ms=elapsed())
+                    for event in decoder.feed(text):
+                        if err := await handle(event):
+                            return err
+                for event in decoder.flush():
+                    if err := await handle(event):
+                        return err
+        except httpx.HTTPError as e:
+            return RuntimeResult(ok=False, error=f"runtime connection error: {type(e).__name__}")
+        if finish is None:
+            return RuntimeResult(ok=False, error="runtime stream ended without a finish reason")
+        return RuntimeResult(ok=True, final_stats=gemini_final_stats(usage, finish), worker_elapsed_ms=elapsed(),
+                             worker_ttft_ms=ttft)
