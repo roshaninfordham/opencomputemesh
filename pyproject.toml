@@ -24,6 +24,14 @@ dev = [
 ocm = "ocm.cli:main"
 ocm-agent = "ocm.agent:main"
 
+[project.optional-dependencies]
+tiger = [
+    "psycopg[binary]>=3.2",
+]
+sentry = [
+    "sentry-sdk>=2.20",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
