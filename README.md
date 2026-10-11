@@ -313,7 +313,7 @@ uv run pytest -q
 What has been verified by hand:
 
 - A real prompt was routed through the coordinator to an Ollama node. It returned runtime-reported token counts and a balanced ledger transfer.
-- The full flow was run through a Cloudflare Quick Tunnel (this run predates the current security headers; not yet re-verified with them):
+- The full flow was run through a Cloudflare Quick Tunnel, and re-run with the current security headers (CSP included) in Chromium. The SPA, same-origin `wss://` streaming and the QR code all worked with no console errors. Safari has not been tested:
   - The `Secure` cookie was set via `X-Forwarded-Proto`.
   - Cross-origin POSTs were rejected.
   - Browser WebSocket streaming worked.
