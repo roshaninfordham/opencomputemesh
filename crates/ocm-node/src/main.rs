@@ -183,10 +183,16 @@ impl Agent {
                     })
                     .collect();
             }
-        let display_name = self.state.display_name.clone().unwrap_or_else(|| self.host.hostname.clone());
+        // Coordinator requires a non-empty display_name.
+        let display_name = [self.state.display_name.as_deref(), Some(self.host.hostname.as_str())]
+            .into_iter()
+            .flatten()
+            .map(str::trim)
+            .find(|n| !n.is_empty())
+            .unwrap_or("node");
         let h = &self.host;
         json!({
-            "display_name": truncate(&display_name, 48), "platform": h.platform, "architecture": h.architecture,
+            "display_name": truncate(display_name, 48), "platform": h.platform, "architecture": h.architecture,
             "cpu_model": h.cpu_model, "logical_cpu_count": h.logical_cpu_count,
             "memory_total_bytes": h.memory_total_bytes, "memory_available_bytes": telemetry::memory_available_bytes(),
             "gpus": h.gpus, "runtime_name": "ollama", "runtime_version": version.as_deref().map(|v| truncate(v, 32)),
@@ -227,17 +233,12 @@ impl Agent {
     }
 
     fn hello(&mut self) -> Result<Value> {
-        if let (Some(node_id), Some(credential)) = (&self.state.node_id, &self.state.credential) {
-            return Ok(json!({ "type": "node.auth", "node_id": node_id, "credential": credential }));
-        }
-        let token = match self.enrollment_token.take() {
-            Some(t) => t,
-            None if std::io::stdin().is_terminal() => {
-                rpassword::prompt_password("One-time enrollment token (from the Share my compute page): ")?
+        build_hello(&self.state, &mut self.enrollment_token, || {
+            if !std::io::stdin().is_terminal() {
+                bail!("No saved credential: set OCM_ENROLLMENT_TOKEN or run interactively.");
             }
-            None => bail!("No saved credential: set OCM_ENROLLMENT_TOKEN or run interactively."),
-        };
-        Ok(json!({ "type": "node.enroll", "enrollment_token": token.trim() }))
+            Ok(rpassword::prompt_password("One-time enrollment token (from the Share my compute page): ")?)
+        })
     }
 
     /// One connection. `Err` is fatal for the process; `Ok(End)` means reconnect (unless a fatal close code).
@@ -278,6 +279,7 @@ impl Agent {
             self.state.credential = Some(cred.to_owned());
             self.state.coordinator = Some(self.coordinator.clone());
             self.save()?;
+            self.enrollment_token = None; // spent; only now, so failed connects retry with it
             say(format!("enrolled as node {node_id}; credential saved to {} (0600)", self.state_path.display()));
         }
         let shared: Vec<&str> = caps["models"].as_array().into_iter().flatten().filter_map(|m| m["model_id"].as_str()).collect();
@@ -347,6 +349,19 @@ impl Agent {
             _ => {}
         }
     }
+}
+
+/// First frame: node.auth with a saved credential, else node.enroll. The token is kept in
+/// `token` (not consumed) so a transient connect failure retries with it.
+fn build_hello(state: &State, token: &mut Option<String>, prompt: impl FnOnce() -> Result<String>) -> Result<Value> {
+    if let (Some(node_id), Some(credential)) = (&state.node_id, &state.credential) {
+        return Ok(json!({ "type": "node.auth", "node_id": node_id, "credential": credential }));
+    }
+    let t = match token {
+        Some(t) => t,
+        None => token.insert(prompt()?),
+    };
+    Ok(json!({ "type": "node.enroll", "enrollment_token": t.trim() }))
 }
 
 async fn heartbeat_loop(out: Out, ollama: Ollama, every: Duration) {
@@ -507,6 +522,25 @@ mod tests {
     fn ws_url_mapping() {
         assert_eq!(ws_url("https://x.trycloudflare.com"), "wss://x.trycloudflare.com/ws/node");
         assert_eq!(ws_url("http://localhost:8031"), "ws://localhost:8031/ws/node");
+    }
+
+    #[test]
+    fn enrollment_token_survives_retries() {
+        let mut state = State::default();
+        let mut token = Some("ocme_t".to_string());
+        for _ in 0..2 {
+            let h = build_hello(&state, &mut token, || panic!("must not prompt")).unwrap();
+            assert_eq!(h["type"], "node.enroll");
+            assert_eq!(h["enrollment_token"], "ocme_t");
+        }
+        // A prompted token is remembered for the next attempt too.
+        let mut none = None;
+        build_hello(&state, &mut none, || Ok(" typed ".into())).unwrap();
+        assert_eq!(none.as_deref(), Some(" typed "));
+        assert!(build_hello(&state, &mut None, || bail!("no tty")).is_err());
+        state.node_id = Some("n".into());
+        state.credential = Some("c".into());
+        assert_eq!(build_hello(&state, &mut token, || panic!()).unwrap()["type"], "node.auth");
     }
 
     #[test]
