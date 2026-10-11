@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import ledger
+from . import ledger, timeseries
 from .config import Settings
 from .db import connect, dumps, insert, new_id, now, parse_ts, row, rows, sha256, update
 from .hub import Conn, Hub, ServiceError
@@ -157,9 +157,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         sweeper = asyncio.create_task(hub.sweep_forever())
+        await hub.timeseries.start()
         log.info("coordinator ready; join path /join/<code> (code in %s/join_code or OCM_JOIN_CODE)", s.data_dir)
         yield
         sweeper.cancel()
+        await hub.timeseries.close()
 
     app = FastAPI(title="OpenComputeMesh Coordinator", version="0.1.0", lifespan=lifespan)
     app.state.hub, app.state.db, app.state.settings, app.state.join_code = hub, db, s, join_code
@@ -312,6 +314,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return {k: snap[k] for k in ("name", "online_node_count", "member_count", "demo_mode")} | {
                 "models": [{"model_id": x["model_id"], "worker_count": x["worker_count"]} for x in snap["models"]]}
         return snap
+
+    @app.get("/api/v1/network/throughput")
+    async def throughput(member=Depends(current_member), minutes: int = Query(60, ge=1, le=1440)):
+        ts = hub.timeseries
+        if not ts.enabled:
+            return {"enabled": False}
+        try:
+            buckets = await ts.throughput(member["network_id"], minutes)
+        except Exception as e:
+            log.warning("timeseries read failed (%s)", type(e).__name__)
+            err("TIMESERIES_UNAVAILABLE", "The time-series store is configured but unreachable.", 503)
+        return {"enabled": True, "source": timeseries.SOURCE, "minutes": minutes, "buckets": buckets,
+                "buffered_rows": len(ts.buffer), "dropped_rows": ts.dropped}
 
     @app.get("/api/v1/network/join-info")
     async def join_info(member=Depends(current_member)):

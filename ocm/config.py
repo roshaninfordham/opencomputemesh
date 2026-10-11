@@ -34,6 +34,7 @@ class Settings:
     min_job_charge_micro_occ: int = 0
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     web_dist: str = "./web/dist"
+    timescale_url: str = ""  # optional Tiger Data / TimescaleDB metrics sink; empty = off
 
     @classmethod
     def from_env(cls, **overrides) -> "Settings":

@@ -20,6 +20,7 @@ from .config import Settings
 from .db import dumps, insert, new_id, now, parse_ts, row, rows, sha256, update
 from .metrics import int_or_none, normalize_ollama
 from .protocol import PROTOCOL_VERSION, GenerationParams
+from .timeseries import Sink
 
 log = logging.getLogger("ocm.hub")
 
@@ -103,6 +104,7 @@ class Hub:
         self.capacity = asyncio.Condition()
         self.offline_timers: dict[str, asyncio.Task] = {}
         self.queued = 0
+        self.timeseries = Sink(settings.timescale_url)  # no-op unless configured; started in the app lifespan
 
     # ---------- startup / housekeeping ----------
 
@@ -535,9 +537,11 @@ class Hub:
                 log_event(self.db, job_id, "worker_metric", duration_ms=fields["worker_elapsed_ms"],
                           done_reason=fields["done_reason"])
                 log_event(self.db, job_id, "completed", duration_ms=fields["end_to_end_ms"])
+            done = row(self.db, "SELECT * FROM jobs WHERE id = ?", job_id)
+            self.timeseries.record(done)
             await emit("request.completed", receipt=self.receipt(job_id), output_chars=len(output))
             await self.broadcast_snapshot(job["network_id"])
-            return {**row(self.db, "SELECT * FROM jobs WHERE id = ?", job_id), "_output": output}
+            return {**done, "_output": output}
         if o.kind == "cancelled":
             return await self._finish(job_id, "CANCELLED", "CANCELLED_BY_USER", emit, t0,
                                       cancel_effect=o.payload.get("cancel_effect"),
@@ -556,6 +560,8 @@ class Hub:
             ledger.release(self.db, job)
             log_event(self.db, job_id, "cancelled" if status == "CANCELLED" else "failed", failure_code=code)
             log_event(self.db, job_id, "credit_released")
+        done = row(self.db, "SELECT * FROM jobs WHERE id = ?", job_id)
+        self.timeseries.record(done)
         msg = {"QUEUE_TIMEOUT": "No eligible worker became free before the queue deadline.",
                "WORKER_DISCONNECTED": "The worker disconnected before finishing.",
                "JOB_TIMEOUT": "The worker did not finish before the job deadline.",
@@ -564,7 +570,7 @@ class Hub:
         await emit("request.cancelled" if status == "CANCELLED" else "request.failed", code=code, message=msg,
                    receipt=self.receipt(job_id))
         await self.broadcast_snapshot(job["network_id"])
-        return row(self.db, "SELECT * FROM jobs WHERE id = ?", job_id)
+        return done
 
     def route_node_event(self, node_id: str, ev: dict) -> None:
         """A node may only report on jobs dispatched to it."""
