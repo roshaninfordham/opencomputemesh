@@ -1,12 +1,59 @@
 # Architecture
 
-OpenComputeMesh v0.1 has three parts:
+OpenComputeMesh v0.1 has these parts:
 
 - a single coordinator process (`ocm/app.py` for HTTP and WebSocket, `ocm/hub.py` for live state and the job lifecycle)
 - a SQLite database in WAL mode (`ocm/db.py`)
-- outbound-only node agents (`ocm/agent.py`) that run jobs against loopback Ollama (`ocm/runtime.py`)
+- outbound-only node agents: Python `ocm-agent` (`ocm/agent.py`) and Rust `ocm-node` (`crates/ocm-node`)
+- a runtime adapter layer (`ocm/runtime.py`) between the Python agent and its model runtime: `OllamaAdapter` (loopback, the default) and `GeminiAdapter` (`--runtime gemini`). The Rust agent talks to Ollama directly.
+- optional: a Tiger Data / TimescaleDB metrics sink (`ocm/timeseries.py`, `OCM_TIMESCALE_URL`)
+- optional: Sentry error monitoring with scrubbers (`ocm/observability.py`, `SENTRY_DSN`)
 
-The database holds everything durable: members, nodes, jobs, job events, ledger, tariffs, pricing references and benchmarks. The hub's memory holds only what cannot be persisted: open sockets, per-job event queues, in-flight token streams and prompts. Socket ownership lives in the process, so run exactly one coordinator.
+The database holds everything durable: members, nodes, jobs, job events, ledger, tariffs, pricing references and benchmarks. The hub's memory holds only what cannot be persisted: open sockets, per-job event queues, in-flight token streams and prompts. Socket ownership lives in the process, so run exactly one coordinator. Every route that touches the database runs on the event loop (`async def`), so database access is serialized on one thread.
+
+```mermaid
+flowchart LR
+  B["Browser<br/>web app"] -- "HTTPS REST + /ws/client" --> C["Coordinator<br/>FastAPI, one process<br/>(app.py + hub.py)"]
+  K["API client"] -- "/v1/chat/completions" --> C
+  C --- D[("SQLite WAL<br/>source of truth")]
+  C -. "Sink.record() on every terminal job<br/>(optional)" .-> T[("TimescaleDB<br/>ocm_job_metrics -> ocm_job_metrics_1m")]
+  T -. "GET /api/v1/network/throughput" .-> C
+  C -. "scrubbed errors (optional)" .-> S["Sentry"]
+  subgraph NODE["Contributor machine (no inbound ports)"]
+    PA["ocm-agent (Python)"] --> RA{{"RuntimeAdapter"}}
+    RA -- "OllamaAdapter" --> O["Ollama 127.0.0.1"]
+    RN["ocm-node (Rust)"] --> O
+  end
+  PA -- "outbound ws(s) /ws/node" --> C
+  RN -- "outbound ws(s) /ws/node" --> C
+  RA -. "GeminiAdapter (optional)" .-> G["Gemini API"]
+```
+
+## Runtime adapters
+
+`RuntimeAdapter` (`ocm/runtime.py`) is a protocol with three methods: `health()` (a version string, or `None`), `list_models()` (normalized `RuntimeModel` records) and `generate_stream(req, on_token, cancel)` (returns a `RuntimeResult` with `final_stats`, `worker_elapsed_ms` and `worker_ttft_ms`). The agent and the coordinator only see these shapes.
+
+| | `OllamaAdapter` | `GeminiAdapter` |
+|---|---|---|
+| Endpoint | `POST /api/chat` on loopback, NDJSON stream (`NDJSONDecoder`) | `POST /v1beta/models/{model}:streamGenerateContent?alt=sse`, server-sent events (`SSEDecoder`) |
+| Network | Loopback only; URL parsed with `httpx.URL` and no userinfo; `trust_env=False` so proxies are ignored | HTTPS to `generativelanguage.googleapis.com`; key only in the `x-goog-api-key` header |
+| Models | `/api/tags`; digest is the Ollama digest | `/models`, filtered to `generateContent`; digest is the model `version` |
+| Token counts | `prompt_eval_count`, `eval_count` | `usageMetadata.promptTokenCount`, `candidatesTokenCount` mapped to the same keys; `thoughtsTokenCount` sent as `thoughts_count` |
+| Durations | `total_duration`, `load_duration`, `prompt_eval_duration`, `eval_duration` (ns) | None reported; left out, so the receipt shows `null` |
+| `done_reason` | Ollama's value | `STOP` to `stop`, `MAX_TOKENS` to `length`, others lowercased |
+| Cancel | Close the stream; Ollama aborts on disconnect | Close the stream |
+
+The coordinator normalizes `final_stats` with `normalize_ollama` (`ocm/metrics.py`) whatever the runtime, stores `done_reason` on the job (`/v1/chat/completions` maps `length` to `finish_reason: "length"`, anything else to `"stop"`), and ignores keys it does not know, including `thoughts_count`.
+
+## Metrics sink and observability
+
+- **TimescaleDB sink** (`ocm/timeseries.py`). `Hub` creates a `Sink(settings.timescale_url)`; it is a no-op unless the URL is set and `psycopg` is installed. The app lifespan starts and closes it. After every terminal transition (`_settle_outcome` for completed jobs, `_finish` for failed, cancelled and expired ones) the hub calls `Sink.record(job)`, which appends a row of metric columns to a bounded deque and returns. A background task connects, ensures the schema under an advisory lock, and inserts in batches. Details and guarantees are in [SPONSORS.md](SPONSORS.md#tiger-data-timescaledb).
+- **Sentry** (`ocm/observability.py`). `ocm serve` calls `init_sentry()` before creating the app. It does nothing without `SENTRY_DSN`. Every event, transaction and breadcrumb passes through pure scrubbers before it is sent. Details in [SPONSORS.md](SPONSORS.md#sentry).
+- **HTTP hardening.** Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` and a restrictive `Content-Security-Policy`. Uvicorn runs without an access log, because request lines can carry the join code and WebSocket tickets.
+
+## Rust agent
+
+`crates/ocm-node` is wire-compatible with `ocm/agent.py`: same messages, same flags for the Ollama runtime, same `<state-dir>/node.json`. It supports Ollama only (`runtime_name: "ollama"`). rustls 0.23 needs a process-level crypto provider before the first TLS handshake; `install_tls_provider()` installs `ring` at startup (pinned in `Cargo.toml`, no C toolchain needed). Without it the agent panicked on its first `wss://` connection.
 
 ## Job state machine
 
@@ -95,15 +142,15 @@ Close codes: 4403 means the origin was rejected. 4401 means the ticket was missi
 | `node.capabilities` | `capabilities` (reply to `model.refresh`) |
 | `job.started` | `job_id` |
 | `job.token` | `job_id`, `text`, `seq` |
-| `job.completed` | `job_id`, `final_stats` (Ollama `total_duration`, `load_duration`, `prompt_eval_count`, `prompt_eval_duration`, `eval_count`, `eval_duration`, `done_reason`), `worker_elapsed_ms`, `worker_ttft_ms`, `tokens_sent` |
+| `job.completed` | `job_id`, `final_stats` (Ollama-shaped: `total_duration`, `load_duration`, `prompt_eval_count`, `prompt_eval_duration`, `eval_count`, `eval_duration`, `done_reason`; a Gemini node sends only `prompt_eval_count`, `eval_count`, `thoughts_count` and `done_reason`, as reported), `worker_elapsed_ms`, `worker_ttft_ms`, `tokens_sent` |
 | `job.failed` | `job_id`, `code` (`MODEL_NOT_SHARED`, `WORKER_TIMEOUT`, `RUNTIME_ERROR`, `CANCELLED`), `started`, optional `cancelled`, `worker_elapsed_ms`, `message` |
 
 `capabilities` holds:
 
 - `display_name`, `platform`, `architecture`, `cpu_model`, `logical_cpu_count`
 - memory totals and `gpus` (each labelled with its `source`)
-- `runtime_name`, `runtime_version`, `runtime_healthy`
-- `models`: `model_id`, `digest`, `family`, `parameter_size`, `quantization`, `size_bytes`
+- `runtime_name` (`ollama` or `gemini`), `runtime_version`, `runtime_healthy`
+- `models`: `model_id`, `digest`, `runtime`, `family`, `parameter_size`, `quantization`, `size_bytes`
 - `max_concurrent_jobs`
 
 The coordinator lowers `max_concurrent_jobs` to `OCM_MAX_CONCURRENT_JOBS_PER_NODE` if it is higher.
@@ -172,7 +219,7 @@ Admission limits checked before queueing:
 - **Queue timeout.** No eligible worker within `OCM_QUEUE_TIMEOUT_SECONDS` leads to `EXPIRED` / `QUEUE_TIMEOUT`.
 - **Job timeout.**
   - The coordinator allows `OCM_JOB_TIMEOUT_SECONDS` from dispatch. When it runs out, it sends `job.cancel` and marks the job `EXPIRED` / `JOB_TIMEOUT`.
-  - The agent applies the same `deadline_seconds` to its Ollama call and reports `WORKER_TIMEOUT` if it runs out first.
+  - The agent applies the same `deadline_seconds` to its runtime call and reports `WORKER_TIMEOUT` if it runs out first.
 - **Cancel.** The requester can cancel through REST or WebSocket.
   - While the job is queued, it becomes `CANCELLED` with `cancel_effect = cancelled_before_dispatch`. The queue loop checks for a cancel about once a second.
   - After dispatch, the job moves to `CANCEL_REQUESTED`, the worker gets `job.cancel`, and the coordinator waits `CANCEL_ACK_SECONDS` (10). If the worker reports `job.failed`, the job becomes `CANCELLED` with `cancel_effect = runtime_stream_closed`. The agent closes the Ollama stream, and Ollama aborts generation when its client disconnects. If the worker disconnects, it becomes `CANCELLED` with `worker_disconnected`. With no reply, it becomes `CANCELLED` with `no_ack_from_worker`. A `job.started` that arrives after the cancel was sent leaves the job in `CANCEL_REQUESTED`. If `job.completed` arrives first, the job completes and settles normally.
