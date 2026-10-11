@@ -1,5 +1,6 @@
 import argparse
 import logging
+from pathlib import Path
 
 import uvicorn
 
@@ -16,11 +17,17 @@ def main(argv=None) -> None:
     a = p.parse_args(argv)
     s = Settings.from_env()
     if a.cmd == "join-code":
+        # Never generate here: a fresh code under the wrong settings would not match the running coordinator.
+        if not s.join_code and not (Path(s.data_dir) / "join_code").exists():
+            raise SystemExit(f"No join code under OCM_DATA_DIR={s.data_dir} and OCM_JOIN_CODE is unset: the coordinator "
+                             "has not created one with these settings. Run `ocm serve` first, or use its settings.")
         print(resolve_join_code(s))
     elif a.cmd == "check-ledger":
         import json
         from . import ledger
         from .db import connect
+        if not Path(s.database_path).is_file():  # connect() would create an empty database and report it consistent
+            raise SystemExit(f"No database at OCM_DATABASE_PATH={s.database_path}; check the coordinator's settings.")
         report = ledger.consistency_report(connect(s.database_path))
         print(json.dumps(report, indent=2))
         raise SystemExit(0 if report["ok"] else 1)

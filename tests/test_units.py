@@ -203,3 +203,23 @@ def test_ledger_property_random_ops(db):
     total = db.execute("SELECT SUM(amount_micro_occ) FROM ledger").fetchone()[0]
     assert total == 2_000_000 + db.execute(
         "SELECT COALESCE(SUM(amount_micro_occ),0) FROM ledger WHERE entry_type IN ('reservation','reservation_release')").fetchone()[0]
+
+
+def test_cli_refuses_to_invent_db_or_join_code(tmp_path, monkeypatch, capsys):
+    from ocm.cli import main
+    db_path, data = tmp_path / "db.sqlite", tmp_path / "data"
+    monkeypatch.setenv("OCM_DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("OCM_DATA_DIR", str(data))
+    monkeypatch.delenv("OCM_JOIN_CODE", raising=False)
+    for cmd in ("check-ledger", "join-code"):
+        with pytest.raises(SystemExit) as e:
+            main([cmd])
+        assert e.value.code not in (0, None)
+    assert not db_path.exists() and not data.exists()  # nothing created under the wrong settings
+    connect(str(db_path)).close()
+    data.mkdir()
+    (data / "join_code").write_text("abc\n")
+    main(["join-code"])
+    with pytest.raises(SystemExit) as e:
+        main(["check-ledger"])
+    assert e.value.code == 0 and capsys.readouterr().out.startswith("abc\n")
