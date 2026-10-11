@@ -205,7 +205,6 @@ export function RunPage({ member, initialModel, go }: { member: Member; initialM
       setRun({ ...r, phase: "failed", error: "Not connected to the coordinator. Reconnecting…" });
   };
   const busy = run && ["sending", "queued", "routed", "running"].includes(run.phase);
-  useTick(busy ? 100 : null);
   const workers = (network?.nodes ?? []).filter((n) => n.status === "ONLINE" && n.models.some((x) => x.model_id === model));
 
   return (
@@ -268,7 +267,7 @@ export function RunPage({ member, initialModel, go }: { member: Member; initialM
               {run.error && <ErrorNote>{run.error}</ErrorNote>}
               {busy && (
                 <p className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
-                  <span>Elapsed <span className="font-medium text-ink">{ms(Math.round(Math.max(0, performance.now() - run.t0)))}</span></span>
+                  <Elapsed t0={run.t0} />
                   <span><span className="font-medium text-ink">{run.chunks}</span> {run.chunks === 1 ? "chunk" : "chunks"} received</span>
                   <span className="text-xs leading-5">Seen by this browser; runtime token counts arrive in the receipt.</span>
                 </p>
@@ -316,6 +315,12 @@ function applyEvent(cur: Run | null, m: { type: string; [k: string]: any }, now:
     case "request.cancelled": return { ...cur, phase: "cancelled", receipt: m.receipt, tDone: now };
   }
   return cur;
+}
+
+/** Owns the 100 ms ticker so only this span re-renders during a run. */
+function Elapsed({ t0 }: { t0: number }) {
+  useTick(100);
+  return <span>Elapsed <span className="font-medium text-ink">{ms(Math.round(Math.max(0, performance.now() - t0)))}</span></span>;
 }
 
 function runText(run: Run) {
