@@ -1,0 +1,383 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "Inst"; src: url(../shared/fonts/instrument-sans-latin-wght-normal.woff2) format("woff2"); font-weight: 400 700; }
+@font-face { font-family: "Plex"; src: url(../shared/fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2"); }
+:root { --paper:#f3f5f3; --ink:#15201d; --muted:#56645f; --line:#d6ddda; --mesh:#2457d6; --soft:#e6ecfb; --good:#1d7449; --warn:#a35a14; --bad:#b42323; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--paper); font-family: "Inst", sans-serif; color: var(--ink); }
+.shot { position: absolute; inset: 0; opacity: 0; overflow: hidden; }
+.center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.kicker { font-size: 26px; color: var(--mesh); font-weight: 600; letter-spacing: .2px; }
+.big { font-size: 92px; font-weight: 700; letter-spacing: -2.5px; line-height: 1.04; }
+.mid { font-size: 58px; font-weight: 650; letter-spacing: -1.2px; line-height: 1.12; }
+.sub { font-size: 30px; color: var(--muted); margin-top: 22px; }
+.cam { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.win { position: absolute; background: #fff; border-radius: 16px; box-shadow: 0 30px 80px rgba(21,32,29,.18), 0 0 0 1px rgba(21,32,29,.08); overflow: hidden; }
+.bar { height: 44px; background: #eef1ef; display: flex; align-items: center; gap: 8px; padding-left: 18px; border-bottom: 1px solid var(--line); }
+.bar i { width: 12px; height: 12px; border-radius: 50%; background: #cfd7d3; display: block; }
+.bar span { margin-left: 18px; font-size: 15px; color: var(--muted); background: #fff; border-radius: 8px; padding: 5px 14px; }
+.win img { display: block; }
+.cursor { position: absolute; width: 34px; height: 34px; left: 0; top: 0; z-index: 20; pointer-events: none; }
+.ripple { position: absolute; width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 50%; border: 4px solid var(--mesh); opacity: 0; z-index: 19; }
+.chip { position: absolute; background: var(--ink); color: #fff; font-size: 24px; font-weight: 600; padding: 14px 24px; border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.2); opacity: 0; z-index: 30; white-space: nowrap; }
+.chip b { color: #9fb8ff; font-weight: 600; }
+.term { position: absolute; background: #10201b; color: #d6f0e3; border-radius: 16px; padding: 26px 30px; font-family: "Plex", monospace; font-size: 22px; line-height: 1.55; box-shadow: 0 30px 80px rgba(0,0,0,.25); white-space: pre; overflow: hidden; }
+.term .p { color: #7fd1a8; } .term .c { color: #8aa69a; } .term .y { color: #ffd479; } .term .r { color: #ff8c8c; }
+.tag { display: inline-block; font-size: 20px; font-weight: 600; padding: 8px 16px; border-radius: 999px; }
+.legend { position: absolute; font-size: 22px; color: var(--muted); }
+.card { position: absolute; background: #fff; border: 2px solid var(--line); border-radius: 18px; padding: 28px 32px; }
+.stat { font-size: 84px; font-weight: 700; letter-spacing: -2px; }
+.lbl { font-size: 24px; color: var(--muted); margin-top: 6px; }
+.dot { position: absolute; border-radius: 50%; }
+.code { position: absolute; background: #fff; border: 2px solid var(--line); border-radius: 16px; padding: 24px 28px; font-family: "Plex", monospace; font-size: 19px; line-height: 1.6; white-space: pre; color: var(--ink); }
+.code .k { color: var(--mesh); } .code .s { color: var(--good); } .code .m { color: var(--muted); }
+.hl { position: absolute; border: 4px solid var(--mesh); border-radius: 12px; opacity: 0; z-index: 25; box-shadow: 0 0 0 9999px rgba(21,32,29,.0); }
+</style></head>
+<body>
+<div class="grain"></div>
+
+<!-- S1: idle laptop / unreachable -->
+<div class="shot" id="s1">
+  <svg width="1920" height="1080" viewBox="0 0 1920 1080">
+    <g id="laptops"></g>
+    <path id="reach" d="M420 760 C 700 640, 900 620, 1080 560" stroke="#2457d6" stroke-width="5" fill="none" stroke-dasharray="6 14" stroke-linecap="round"/>
+    <g id="xmark" transform="translate(1000 590)" opacity="0"><circle r="34" fill="#b42323"/><path d="M-13 -13L13 13M13 -13L-13 13" stroke="#fff" stroke-width="6" stroke-linecap="round"/></g>
+  </svg>
+  <div class="legend" id="idleTag" style="left:1180px;top:420px;opacity:0"><span class="tag" style="background:#e6ecfb;color:#2457d6">model loaded · idle</span></div>
+  <div class="legend" id="needTag" style="left:300px;top:800px;opacity:0"><span class="tag" style="background:#fff;border:2px solid #d6ddda;color:#15201d">needs a model</span></div>
+  <div style="position:absolute;left:0;right:0;top:110px" class="center"><div class="mid" id="s1t">A good model, sitting idle.</div></div>
+</div>
+
+<!-- S2: problem statements -->
+<div class="shot center" id="s2">
+  <div class="mid" id="p1">Private. Cheap to run.</div>
+  <div class="mid" id="p2" style="color:var(--bad);margin-top:10px">Stuck on one machine.</div>
+  <div style="height:70px"></div>
+  <div class="mid" id="p3" style="font-size:50px">Who used what? What did it cost?</div>
+</div>
+
+<!-- S3: logo -->
+<div class="shot center" id="s3">
+  <svg width="220" height="220" viewBox="0 0 32 32" style="overflow:visible">
+    <path id="tri" d="M6 6L26 6L16 26Z" stroke="#15201d" stroke-width="1.6" stroke-linejoin="round" fill="none" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+    <circle class="nd" cx="6" cy="6" r="4" fill="#2457d6"/><circle class="nd" cx="26" cy="6" r="4" fill="#2457d6"/><circle class="nd" cx="16" cy="26" r="4" fill="#2457d6"/>
+  </svg>
+  <div class="big" id="word" style="margin-top:30px">OpenComputeMesh</div>
+  <div class="sub" id="tagline" style="font-size:40px;color:var(--ink)"><span>Share compute.</span> <span>Run models.</span> <span style="color:var(--mesh)">See every token.</span></div>
+</div>
+
+<!-- S4: join on phone -->
+<div class="shot" id="s4">
+  <div style="position:absolute;left:140px;top:300px" id="s4txt">
+    <div class="kicker">Running for real</div>
+    <div class="mid" style="margin-top:14px">Scan. Pick a nickname.<br>You're in.</div>
+    <div class="sub">No account. No password.</div>
+  </div>
+  <div id="phone" style="position:absolute;left:1120px;top:70px;width:440px;height:940px;border-radius:64px;background:#15201d;padding:22px;box-shadow:0 40px 90px rgba(0,0,0,.25)">
+    <div style="width:396px;height:896px;border-radius:44px;overflow:hidden;background:#fff;position:relative">
+      <img src="assets/mobile-join.png" style="width:396px;display:block" id="mj">
+    </div>
+  </div>
+  <div class="ripple" id="rip4"></div>
+</div>
+
+<!-- S5: agent terminal + nodes -->
+<div class="shot" id="s5">
+  <div class="term" id="term5" style="left:120px;top:120px;width:1680px;height:520px"></div>
+  <div class="cam" id="cam5" style="opacity:0">
+    <div class="win" style="left:160px;top:80px;width:1600px;height:1044px"><div class="bar"><i></i><i></i><i></i><span>opencomputemesh / nodes</span></div><img src="assets/nodes.png" width="1600"></div>
+  </div>
+  <div class="chip" id="chip5a" style="left:760px;top:900px">Dials out over <b>WSS</b> · no inbound port · Ollama on <b>127.0.0.1</b></div>
+  <div class="chip" id="chip5b" style="left:640px;top:900px">Owner approves models · <b>pause</b> · <b>revoke</b> any time</div>
+</div>
+
+<!-- S6: run + stream -->
+<div class="shot" id="s6">
+  <div class="cam" id="cam6">
+    <div class="win" style="left:160px;top:50px;width:1600px;height:1044px"><div class="bar"><i></i><i></i><i></i><span>opencomputemesh / run</span></div>
+      <div id="runstack" style="position:relative;width:1600px;height:1000px"><img class="fr" src="assets/run-ready.png" width="1600" style="position:absolute;left:0;top:0"></div>
+    </div>
+    <svg class="cursor" id="cur6" viewBox="0 0 24 24"><path d="M3 2l7 19 2.5-7.5L20 11z" fill="#15201d" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    <div class="ripple" id="rip6"></div>
+  </div>
+  <div class="chip" id="chip6" style="left:520px;top:960px">Routed to <b>py-over-tunnel</b> · least busy · exact model · credit hold placed</div>
+  <div class="chip" id="chip6b" style="left:690px;top:960px">Live tokens over a <b>WebSocket</b></div>
+</div>
+
+<!-- S7: receipt -->
+<div class="shot" id="s7">
+  <div class="cam" id="cam7">
+    <div class="win" style="left:160px;top:50px;width:1600px;height:1115px"><div class="bar"><i></i><i></i><i></i><span>opencomputemesh / run</span></div><img src="assets/run-done.png" width="1600"></div>
+  </div>
+  <div class="chip" id="c7a" style="left:180px;top:930px">Runtime-reported · <b>47 in / 73 out</b></div>
+  <div class="chip" id="c7b" style="left:760px;top:930px">First token <b>1.73 s</b></div>
+  <div class="chip" id="c7c" style="left:1160px;top:930px">Load <b>1.62 s</b> · eval <b>76 ms</b> · gen <b>1.04 s</b></div>
+  <div class="chip" id="c7d" style="left:560px;top:930px">maya paid <b>0.266 OCC</b> = rust-host earned <b>0.266 OCC</b> ✓ balanced</div>
+</div>
+
+<!-- S8: local vs mesh -->
+<div class="shot center" id="s8">
+  <div class="kicker">Your machine vs the network</div>
+  <img id="lvm" src="assets/local-vs-mesh.png" style="width:1580px;margin-top:36px;border-radius:16px;box-shadow:0 30px 80px rgba(21,32,29,.15)">
+  <div class="sub" style="font-size:22px">Same model digest, same prompt. Single-run, labelled as illustrative.</div>
+</div>
+
+<!-- S9: architecture + Gemini -->
+<div class="shot" id="s9">
+  <div class="cam" id="cam9"><img src="assets/architecture.svg" width="1840" style="position:absolute;left:40px;top:80px"></div>
+  <div class="code" id="gem" style="left:480px;top:735px;z-index:2;width:960px;opacity:0;font-size:18px;box-shadow:0 20px 60px rgba(0,0,0,.12)"><span class="m"># ocm/runtime.py</span>
+<span class="k">class</span> GeminiAdapter:   <span class="m"># same RuntimeAdapter interface</span>
+    POST /models/{m}:<span class="s">streamGenerateContent?alt=sse</span>
+    header  <span class="s">x-goog-api-key</span>   <span class="m"># key never leaves the node</span>
+    usageMetadata.promptTokenCount     → input tokens
+    usageMetadata.candidatesTokenCount → output tokens</div>
+  <div id="gemband" style="position:absolute;left:0;right:0;top:640px;bottom:0;background:linear-gradient(180deg,rgba(243,245,243,0),#f3f5f3 22%);opacity:0"></div><div style="position:absolute;left:480px;top:680px;opacity:0;z-index:2" id="gemtag"><span class="tag" style="background:#fdf6ec;color:#a35a14;border:2px dashed #a35a14">Gemini API · unit-tested · live with your key</span></div>
+</div>
+
+<!-- S10: Tiger Data -->
+<div class="shot" id="s10">
+  <div style="position:absolute;left:110px;top:90px"><div class="kicker">Tiger Data</div><div class="mid" style="margin-top:8px">Every job → a TimescaleDB hypertable</div></div>
+  <div class="term" id="term10" style="left:110px;top:250px;width:1700px;height:360px;font-size:21px"></div>
+  <div style="position:absolute;left:110px;top:650px;opacity:0" id="tigerwin"><div class="kicker" style="font-size:22px;margin-bottom:12px">Live chart in the app, read from the continuous aggregate</div><div class="win" style="position:relative;width:1300px;height:320px"><img src="assets/overview-throughput.png" width="1300" style="margin-left:-264px;margin-top:-950px;width:1300px;transform:scale(1.3);transform-origin:264px 950px"></div></div>
+</div>
+
+<!-- S11: Sentry -->
+<div class="shot" id="s11">
+  <div style="position:absolute;left:110px;top:90px"><div class="kicker">Sentry</div><div class="mid" style="margin-top:8px">Errors leave. Prompts and secrets don't.</div></div>
+  <div class="code" id="sbefore" style="left:110px;top:270px;width:830px;font-size:19px"><span class="m">event before scrubbing</span>
+value: "enroll failed for <span style="color:#b42323">ocme_k3J9xQ2mVbT7wLp4ZsR8nYc1</span>"
+url:   "/join/<span style="color:#b42323">T3BO3hAyFv5K</span>?ticket=<span style="color:#b42323">abc</span>"
+cookie: "<span style="color:#b42323">ocm_session=Zr9…</span>"
+authorization: "<span style="color:#b42323">Bearer ocm_8fJ2kLq9…</span>"
+data: { messages: [ "<span style="color:#b42323">my private prompt</span>" ] }</div>
+  <div class="code" id="safter" style="left:980px;top:270px;width:830px;font-size:19px;opacity:0;border-color:#1d7449"><span class="m">what Sentry receives (real scrub_event output)</span>
+value: "enroll failed for <span class="s">[redacted]</span>"
+url:   "/join/<span class="s">[redacted]</span>"
+cookie: "<span class="s">[redacted]</span>"
+authorization: "<span class="s">[redacted]</span>"
+data:  <span class="s">dropped</span></div>
+</div>
+
+<!-- S12: proof -->
+<div class="shot" id="s12">
+  <div style="position:absolute;left:110px;top:90px"><div class="kicker">Completion</div><div class="mid" style="margin-top:8px">Not a mock-up.</div></div>
+  <div class="card" id="k1" style="left:110px;top:300px;width:520px"><div class="stat" style="font-size:56px">Python · Rust · React</div><div class="lbl">coordinator, two node agents, web app</div></div>
+  <div class="card" id="k2" style="left:110px;top:520px;width:250px"><div class="stat" id="tests">0</div><div class="lbl">tests passing</div></div>
+  <div class="card" id="k3" style="left:380px;top:520px;width:250px"><div class="stat" style="color:var(--good)">CI ✓</div><div class="lbl">on every push</div></div>
+  <div class="card" id="k4" style="left:110px;top:740px;width:520px"><div class="stat" style="font-size:44px">Public tunnel → phone</div><div class="lbl">receipts matched the runtime</div></div>
+  <div id="tun" style="position:absolute;left:1100px;top:60px;width:420px;height:960px;border-radius:60px;background:#15201d;padding:20px;opacity:0"><div style="width:380px;height:920px;border-radius:42px;overflow:hidden;background:#fff"><img src="assets/tunnel-run.png" style="width:380px"></div></div>
+</div>
+
+<!-- S13: learning -->
+<div class="shot" id="s13">
+  <div style="position:absolute;left:110px;top:90px"><div class="kicker">Learning</div><div class="mid" style="margin-top:8px">What broke, and what it taught us.</div></div>
+  <div class="term" id="term13" style="left:110px;top:270px;width:1700px;height:300px;font-size:21px"></div>
+  <div class="code" id="cap" style="left:110px;top:620px;width:1700px;opacity:0;font-size:24px"><span class="m"># a node can over-report usage, so settlement is capped and disclosed on the receipt</span>
+settled = <span class="k">min</span>(measured_cost, hold)        <span class="s">debit == reward</span>    <span class="s">capped: true → shown to both sides</span></div>
+</div>
+
+<!-- S14: close -->
+<div class="shot center" id="s14">
+  <svg width="150" height="150" viewBox="0 0 32 32"><path d="M6 6L26 6L16 26Z" stroke="#15201d" stroke-width="1.6" stroke-linejoin="round" fill="none"/><g fill="#2457d6"><circle cx="6" cy="6" r="4"/><circle cx="26" cy="6" r="4"/><circle cx="16" cy="26" r="4"/></g></svg>
+  <div class="big" style="margin-top:26px">OpenComputeMesh</div>
+  <div class="sub" style="font-size:38px;color:var(--ink)" id="bring">Bring the hardware you already own.</div>
+  <div id="url" style="margin-top:60px;font-size:36px;font-weight:600;color:var(--mesh);background:#fff;border:2px solid var(--line);padding:18px 34px;border-radius:16px">github.com/roshaninfordham/opencomputemesh</div>
+  <div class="sub" style="font-size:22px;margin-top:26px" id="spons">Ollama · Gemini API · Tiger Data · Sentry · Rust · FastAPI · React</div>
+</div>
+
+<script src="../shared/vendor/gsap.min.js"></script>
+<script src="../shared/vendor/SplitText.min.js"></script>
+<script src="../shared/engine.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const STREAM = 14;
+const frames = Array.from({length: STREAM}, (_, i) => `assets/stream/f${String(i).padStart(3, "0")}.png`);
+document.addEventListener("DOMContentLoaded", () => {
+  const st = document.querySelector("#runstack");
+  frames.forEach(src => st.insertAdjacentHTML("beforeend", `<img class="fr" src="${src}" width="1600" style="position:absolute;left:0;top:0;opacity:0">`));
+});
+
+// laptops grid for S1
+(() => {
+  const g = $("#laptops"); let k = 0;
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) {
+    const x = 260 + c * 250 + (r % 2) * 60, y = 330 + r * 190, hot = (r === 1 && c === 4);
+    g.insertAdjacentHTML("beforeend",
+      `<g class="lap" transform="translate(${x} ${y})" opacity="0">
+        <rect x="-62" y="-44" width="124" height="80" rx="8" fill="${hot ? "#2457d6" : "#fff"}" stroke="${hot ? "#2457d6" : "#c4cdc9"}" stroke-width="3"/>
+        <rect x="-80" y="38" width="160" height="12" rx="6" fill="${hot ? "#1c47b3" : "#d6ddda"}"/>
+        ${hot ? '<text x="0" y="6" text-anchor="middle" font-family="Inst" font-size="20" font-weight="700" fill="#fff">A.I.</text>' : ""}
+      </g>`);
+  }
+})();
+
+function typeInto(el, lines, t0, dur, tl) {
+  // lines: array of html strings; revealed line by line, last line char by char (pure function of t)
+  const full = lines.join("\n");
+  const plain = full.replace(/<[^>]+>/g, "");
+  Scene.onFrame(t => {
+    const p = Math.max(0, Math.min(1, (t - t0) / dur));
+    const n = Math.floor(plain.length * p);
+    // walk html, emitting up to n visible chars
+    let out = "", seen = 0, i = 0;
+    while (i < full.length && seen < n) {
+      if (full[i] === "<") { const j = full.indexOf(">", i); out += full.slice(i, j + 1); i = j + 1; continue; }
+      out += full[i]; seen++; i++;
+    }
+    const open = (out.match(/<span/g) || []).length - (out.match(/<\/span>/g) || []).length;
+    el.innerHTML = out + "</span>".repeat(Math.max(0, open)) + (p > 0 && p < 1 ? '<span style="background:#7fd1a8">&nbsp;</span>' : "");
+  });
+}
+
+function show(tl, id, t, d = .6) { tl.to(id, { opacity: 1, duration: d, ease: "power2.out" }, t); }
+function hide(tl, id, t, d = .5) { tl.to(id, { opacity: 0, duration: d, ease: "power2.in" }, t); }
+function cut(tl, a, b, t) { if (a) hide(tl, a, t - .45, .45); show(tl, b, t - .05, .55); }
+function focus(tl, cam, r, t, d = 1.4, pad = .9) {
+  const s = Math.min(1920 * pad / r.w, 1080 * pad / r.h);
+  tl.to(cam, { scale: s, x: 960 - (r.x + r.w / 2) * s, y: 540 - (r.y + r.h / 2) * s, duration: d, ease: "power3.inOut" }, t);
+}
+function click(tl, rip, x, y, t) {
+  tl.set(rip, { left: x, top: y, scale: .3, opacity: .9 }, t);
+  tl.to(rip, { scale: 1.6, opacity: 0, duration: .55, ease: "power2.out" }, t);
+}
+
+Scene.boot("audio/manifest.json", (tl, E) => {
+  const A = id => E.at(id), Z = id => E.end(id);
+
+  // S1
+  show(tl, "#s1", 0, .01);
+  tl.to(".lap", { opacity: 1, duration: .5, stagger: .05, ease: "power2.out" }, .2);
+  tl.from("#s1t", { y: 30, opacity: 0, duration: .8, ease: "power3.out" }, .3);
+  show(tl, "#idleTag", A("l1") + 2.2);
+  tl.fromTo("#reach", { strokeDashoffset: 600 }, { strokeDashoffset: 0, duration: 1.2, ease: "power2.out" }, A("l2"));
+  tl.set("#reach", { strokeDasharray: "6 14" }, 0);
+  show(tl, "#needTag", A("l2"));
+  tl.to("#xmark", { opacity: 1, duration: .3 }, A("l2") + 1.1);
+  tl.from("#xmark", { scale: .3, duration: .4, ease: "back.out(3)", transformOrigin: "center" }, A("l2") + 1.1);
+
+  // S2
+  cut(tl, "#s1", "#s2", A("l3"));
+  tl.from("#p1", { y: 40, opacity: 0, duration: .7, ease: "power3.out" }, A("l3"));
+  tl.from("#p2", { y: 40, opacity: 0, duration: .7, ease: "power3.out" }, A("l3") + 2.2);
+  tl.from("#p3", { y: 40, opacity: 0, duration: .7, ease: "power3.out" }, A("l4") + 1.6);
+
+  // S3 logo
+  cut(tl, "#s2", "#s3", A("l5"));
+  tl.to("#tri", { strokeDashoffset: 0, duration: 1.0, ease: "power2.inOut" }, A("l5"));
+  tl.from(".nd", { scale: 0, transformOrigin: "center", duration: .5, stagger: .15, ease: "back.out(3)" }, A("l5") + .3);
+  tl.from("#word", { y: 30, opacity: 0, duration: .8, ease: "power3.out" }, A("l5") + .8);
+  tl.from("#tagline span", { y: 24, opacity: 0, duration: .5, stagger: .75, ease: "power3.out" }, A("l6"));
+
+  // S4 phone join
+  cut(tl, "#s3", "#s4", A("l7"));
+  tl.from("#phone", { y: 160, opacity: 0, duration: 1.0, ease: "power3.out" }, A("l7"));
+  tl.from("#s4txt", { x: -60, opacity: 0, duration: .8, ease: "power3.out" }, A("l7") + .3);
+  click(tl, "#rip4", 1340, 880, A("l8") + 2.4);
+
+  // S5 terminal then nodes
+  cut(tl, "#s4", "#s5", A("l9"));
+  typeInto($("#term5"), [
+    '<span class="c">$</span> uv run ocm-agent --coordinator https://…trycloudflare.com --models qwen2.5:1.5b',
+    '<span class="p">[ocm-agent]</span> enrolled as node b72f0afa…; credential saved (0600)',
+    '<span class="p">[ocm-agent]</span> online; sharing qwen2.5:1.5b',
+    '',
+    '<span class="c">$</span> ./ocm-node --coordinator https://…trycloudflare.com --models qwen2.5:1.5b',
+    '<span class="y">[ocm-node]</span> enrolled as node 3a62ea5d…; credential saved (0600)',
+    '<span class="y">[ocm-node]</span> online; sharing qwen2.5:1.5b',
+  ], A("l9") + .2, 5.4, tl);
+  show(tl, "#chip5a", A("l10") + .3);
+  tl.to("#term5", { opacity: 0, y: -40, duration: .6 }, A("l11") - .3);
+  hide(tl, "#chip5a", A("l11") - .3);
+  tl.set("#cam5", { scale: .92, x: 70, y: 30 }, 0);
+  show(tl, "#cam5", A("l11") - .1);
+  focus(tl, "#cam5", { x: 532, y: 380, w: 1090, h: 360 }, A("l11") + .4, 1.6, .95);
+  show(tl, "#chip5b", A("l11") + 1.6);
+
+  // S6 run + stream
+  cut(tl, "#s5", "#s6", A("l12"));
+  tl.set("#cam6", { scale: .92, x: 77, y: 40 }, 0);
+  tl.set("#cur6", { x: 1300, y: 900 }, 0);
+  tl.to("#cur6", { x: 160 + 416, y: 94 + 453, duration: 1.3, ease: "power3.inOut" }, A("l12") + 1.0);
+  click(tl, "#rip6", 160 + 418, 94 + 455, A("l12") + 2.4);
+  show(tl, "#chip6", A("l13") + .2); hide(tl, "#chip6", Z("l13"));
+  focus(tl, "#cam6", { x: 160 + 880, y: 94 + 80, w: 600, h: 460 }, A("l13") + 3.0, 1.8);
+  tl.to("#cur6", { opacity: 0, duration: .3 }, A("l13") + 3.0);
+  show(tl, "#chip6b", A("l14"));
+  const sT0 = A("l13") + 4.6, sT1 = A("l14") + 2.2;
+  E.onFrame(t => {
+    let k = 0;   // 0 = ready screen, 1..STREAM = real captured frames
+    if (t >= A("l12") + 2.45) {
+      const p = Math.max(0, Math.min(1, (t - sT0) / (sT1 - sT0)));
+      k = 1 + (t < sT0 ? Math.min(6, Math.floor((t - A("l12") - 2.45) * 2.5)) : Math.min(STREAM - 1, 6 + Math.floor(p * (STREAM - 7))));
+    }
+    document.querySelectorAll("#runstack .fr").forEach((im, i) => { im.style.opacity = i === k ? 1 : 0; });
+  });
+
+  // S7 receipt
+  cut(tl, "#s6", "#s7", A("l15"));
+  tl.set("#cam7", { scale: .92, x: 77, y: 40 }, 0);
+  focus(tl, "#cam7", { x: 160 + 896, y: 94 + 470, w: 560, h: 200 }, A("l15") + .2, 1.5, .85);
+  show(tl, "#c7a", A("l16") + .1); hide(tl, "#c7a", A("l16") + 3.3);
+  show(tl, "#c7b", A("l16") + 3.4); hide(tl, "#c7b", A("l16") + 5.3);
+  show(tl, "#c7c", A("l16") + 5.4); hide(tl, "#c7c", Z("l16") + .2);
+  focus(tl, "#cam7", { x: 160 + 896, y: 94 + 700, w: 560, h: 150 }, A("l17") - .2, 1.4, .8);
+  show(tl, "#c7d", A("l17") + 1.2);
+
+  // S8 local vs mesh
+  cut(tl, "#s7", "#s8", A("l18"));
+  tl.from("#lvm", { scale: .9, opacity: 0, duration: 1.0, ease: "power3.out" }, A("l18"));
+
+  // S9 architecture + Gemini
+  cut(tl, "#s8", "#s9", A("l19"));
+  tl.from("#cam9", { opacity: 0, scale: 1.04, transformOrigin: "50% 50%", duration: 1.0 }, A("l19"));
+  focus(tl, "#cam9", { x: 1319, y: 419, w: 503, h: 196 }, A("l20") + .4, 1.6, .42);
+  show(tl, "#gemband", A("l20") + 3.4);
+  show(tl, "#gemtag", A("l20") + 3.6);
+  show(tl, "#gem", A("l20") + 4.0);
+
+  // S10 Tiger Data
+  cut(tl, "#s9", "#s10", A("l21"));
+  typeInto($("#term10"), [
+    '<span class="c">ocm=#</span> SELECT bucket, model_id, jobs, completed,',
+    '        input_tokens, output_tokens, p95_ttft_ms, avg_tok_s',
+    '      FROM <span class="y">ocm_job_metrics_1m</span>;   <span class="c">-- continuous aggregate</span>',
+    '',
+    ' 20:48:00+00 | qwen2.5:1.5b |  3 |  3 | 106 | 48 | 174.1 | 85.8',
+    '',
+    '<span class="c">-- hypertable ocm_job_metrics · compression after 7 days</span>',
+    '<span class="c">-- real rows from 3 live prompts on tiger-node</span>',
+  ], A("l21") + .4, 4.2, tl);
+  show(tl, "#tigerwin", A("l21") + 3.6);
+
+  // S11 Sentry
+  cut(tl, "#s10", "#s11", A("l22"));
+  tl.from("#sbefore", { y: 30, opacity: 0, duration: .7 }, A("l22") + .2);
+  show(tl, "#safter", A("l22") + 3.2, .8);
+  tl.from("#safter", { x: 40, duration: .8, ease: "power3.out" }, A("l22") + 3.2);
+
+  // S12 proof
+  cut(tl, "#s11", "#s12", A("l23"));
+  tl.from(["#k1", "#k2", "#k3", "#k4"], { y: 40, opacity: 0, duration: .6, stagger: .5, ease: "power3.out" }, A("l24"));
+  show(tl, "#tun", A("l25"));
+  tl.from("#tun", { y: 120, duration: 1.0, ease: "power3.out" }, A("l25"));
+  E.onFrame(t => { const p = Math.max(0, Math.min(1, (t - A("l24") - 1.6) / 1.6)); $("#tests").textContent = Math.round(76 * (1 - Math.pow(1 - p, 3))); });
+
+  // S13 learning
+  cut(tl, "#s12", "#s13", A("l26"));
+  typeInto($("#term13"), [
+    '<span class="c">$</span> ./ocm-node --coordinator https://…trycloudflare.com',
+    '<span class="r">thread \'main\' panicked: Could not automatically determine the process-level CryptoProvider</span>',
+    '<span class="p">fix:</span> rustls ring provider installed at startup  →  <span class="p">enrolled over wss:// · job completed</span>',
+  ], A("l26") + .5, 3.6, tl);
+  show(tl, "#cap", A("l26") + 4.6);
+
+  // S14 close
+  cut(tl, "#s13", "#s14", A("l27"));
+  tl.from("#s14 svg", { scale: .6, opacity: 0, duration: .8, ease: "back.out(2)" }, A("l27"));
+  tl.from("#bring", { y: 20, opacity: 0, duration: .7 }, A("l27") + 1.2);
+  tl.from("#url", { y: 30, opacity: 0, duration: .8, ease: "power3.out" }, A("l28"));
+  tl.from("#spons", { opacity: 0, duration: .8 }, A("l28") + .8);
+});
+</script>
+</body></html>

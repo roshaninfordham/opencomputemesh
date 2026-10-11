@@ -1,0 +1,175 @@
+{
+ "id": "ocm-demo",
+ "voice": "af_heart",
+ "tail": 1.6,
+ "lines": [
+  {
+   "id": "l1",
+   "text": "Right now, there's a capable A.I. model sitting idle on a laptop in this room.",
+   "speed": 0.94,
+   "gap": 0.6
+  },
+  {
+   "id": "l2",
+   "text": "And someone who needs it can't reach it.",
+   "speed": 0.94,
+   "gap": 0.75
+  },
+  {
+   "id": "l3",
+   "text": "Local models are private and cheap to run. But they're stuck on one machine.",
+   "speed": 0.94,
+   "gap": 0.6
+  },
+  {
+   "id": "l4",
+   "text": "And when compute does get shared, nobody can say who used what, or what it cost.",
+   "speed": 0.94,
+   "gap": 0.85
+  },
+  {
+   "id": "l5",
+   "text": "So we built Open Compute Mesh.",
+   "speed": 0.92,
+   "gap": 0.55
+  },
+  {
+   "id": "l6",
+   "text": "Share compute. Run models. See every token.",
+   "speed": 0.89,
+   "gap": 1.65
+  },
+  {
+   "id": "l7",
+   "text": "Here's the whole thing, end to end, running for real.",
+   "speed": 0.94,
+   "gap": 0.6
+  },
+  {
+   "id": "l8",
+   "text": "You scan a QR code and join with a nickname. No account, no password.",
+   "speed": 0.94,
+   "gap": 0.65
+  },
+  {
+   "id": "l9",
+   "text": "To share compute, a small agent runs next to your local model. In Python, or as a single Rust binary.",
+   "speed": 0.94,
+   "gap": 0.55
+  },
+  {
+   "id": "l10",
+   "text": "It dials out to the coordinator. It never opens a port on your machine, and it only talks to your model on loopback.",
+   "speed": 0.94,
+   "gap": 0.55
+  },
+  {
+   "id": "l11",
+   "text": "You choose exactly which models to share, and you can pause or revoke at any time.",
+   "speed": 0.94,
+   "gap": 1.35
+  },
+  {
+   "id": "l12",
+   "text": "Now, pick a model that a real node is serving, and send a prompt.",
+   "speed": 0.94,
+   "gap": 0.55
+  },
+  {
+   "id": "l13",
+   "text": "The coordinator finds the least busy machine with that exact model, places a credit hold, and dispatches the job.",
+   "speed": 0.94,
+   "gap": 0.55
+  },
+  {
+   "id": "l14",
+   "text": "Tokens stream back over a WebSocket, live.",
+   "speed": 0.94,
+   "gap": 0.75
+  },
+  {
+   "id": "l15",
+   "text": "Then you get a receipt.",
+   "speed": 0.94,
+   "gap": 0.55
+  },
+  {
+   "id": "l16",
+   "text": "Input and output tokens, reported by the runtime itself. Time to first token. Model load, prompt evaluation, generation. Every millisecond, accounted for.",
+   "speed": 0.94,
+   "gap": 0.65
+  },
+  {
+   "id": "l17",
+   "text": "You pay the measured cost, and the owner earns exactly the same, in an append only ledger that's checked for balance.",
+   "speed": 0.94,
+   "gap": 0.6
+  },
+  {
+   "id": "l18",
+   "text": "Share the same model yourself, and you can race your machine against the network, side by side.",
+   "speed": 0.94,
+   "gap": 1.45
+  },
+  {
+   "id": "l19",
+   "text": "Underneath, every layer is pluggable.",
+   "speed": 0.94,
+   "gap": 0.55
+  },
+  {
+   "id": "l20",
+   "text": "Runtimes sit behind one adapter. Ollama runs locally, and a Gemini A.P.I. adapter plugs into the same interface, with token counts from Gemini's own usage data.",
+   "speed": 0.94,
+   "gap": 0.65
+  },
+  {
+   "id": "l21",
+   "text": "Every finished job flows into Tiger Data, as a Timescale D.B. hypertable. A continuous aggregate powers the live throughput chart.",
+   "speed": 0.94,
+   "gap": 0.65
+  },
+  {
+   "id": "l22",
+   "text": "And Sentry watches the coordinator, with scrubbers that strip prompts, outputs and secrets before anything leaves the machine.",
+   "speed": 0.94,
+   "gap": 1.45
+  },
+  {
+   "id": "l23",
+   "text": "This isn't a mock-up.",
+   "speed": 0.92,
+   "gap": 0.55
+  },
+  {
+   "id": "l24",
+   "text": "A Python coordinator, two agents, a React app, seventy-six tests, and C.I. on every push.",
+   "speed": 0.94,
+   "gap": 0.55
+  },
+  {
+   "id": "l25",
+   "text": "We ran it through a public tunnel, from a phone, and the receipts matched the runtime.",
+   "speed": 0.94,
+   "gap": 0.75
+  },
+  {
+   "id": "l26",
+   "text": "And we learned the hard way. Rust's T.L.S. stack panicked on our first secure connection, and a dishonest node taught us to cap every charge at the hold.",
+   "speed": 0.94,
+   "gap": 1.45
+  },
+  {
+   "id": "l27",
+   "text": "Open Compute Mesh. Bring the hardware you already own.",
+   "speed": 0.9,
+   "gap": 0.65
+  },
+  {
+   "id": "l28",
+   "text": "It's open source, on GitHub.",
+   "speed": 0.92,
+   "gap": 0.55
+  }
+ ]
+}

@@ -1,0 +1,54 @@
+/* Base ad system — dark, minimal, typographic. Rebrand via the :root tokens below.
+   All sizing is in rem, and 1rem is derived from viewport width, so the identical
+   layout renders at 1080x1920 or supersampled 2160x3840 with no changes. */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("fonts/PlusJakartaSans.ttf") format("truetype-variations");
+  font-weight: 200 800;
+  font-display: block;
+}
+
+:root {
+  --ink:#000; --muted:#b0b0b0; --faint:#8d8d8d; --dim:#6a6a6a; --bright:#f0f0f0;
+  --hairline:rgba(255,255,255,.10);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+html{ font-size:calc(100vw / 108); }        /* 1rem = 10px at 1080 wide */
+
+body{
+  width:100vw; height:100vh; overflow:hidden;
+  background:var(--ink); color:var(--muted);
+  font-family:"Plus Jakarta Sans",-apple-system,Helvetica,Arial,sans-serif;
+  font-weight:300; -webkit-font-smoothing:antialiased;
+}
+
+#stage{ position:absolute; inset:0; }
+
+/* the bright hairline across the top of the site */
+.edge{ position:absolute; top:0; left:0; right:0; height:.2rem; z-index:30;
+  background:linear-gradient(90deg,rgba(255,255,255,.16) 0%,var(--bright) 50%,rgba(255,255,255,.16) 100%); }
+
+/* soft light that swells behind the active beat */
+.aura{ position:absolute; left:50%; top:50%; width:120rem; height:120rem;
+  margin:-60rem 0 0 -60rem; z-index:1; pointer-events:none; opacity:0;
+  background:radial-gradient(circle closest-side,rgba(255,255,255,.14) 0%,rgba(255,255,255,.045) 42%,rgba(255,255,255,0) 70%); }
+
+.scene{ position:absolute; inset:0; z-index:10;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:0 8rem; text-align:center; }
+
+.kicker{ font-size:2.0rem; font-weight:400; letter-spacing:.42em; text-transform:uppercase;
+  color:var(--dim); }
+.line{ font-size:6.4rem; font-weight:200; line-height:1.14; letter-spacing:-.028em; color:var(--bright); }
+.sub { font-size:2.9rem; font-weight:300; line-height:1.45; color:var(--faint); letter-spacing:-.005em; }
+.rule{ height:1px; background:var(--hairline); width:100%; }
+
+.grain{ position:absolute; inset:-10%; z-index:40; pointer-events:none;
+  opacity:.055; mix-blend-mode:overlay; background-repeat:repeat; }
+.vignette{ position:absolute; inset:0; z-index:35; pointer-events:none;
+  background:radial-gradient(ellipse 78% 62% at 50% 46%,rgba(0,0,0,0) 42%,rgba(0,0,0,.62) 100%); }
+
+/* safe area guides — never rendered, just for authoring */
+.safe{ display:none; }

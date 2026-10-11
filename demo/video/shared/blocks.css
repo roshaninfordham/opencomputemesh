@@ -1,0 +1,34 @@
+/* Shared components, so every ad in a set reads as one campaign. */
+
+.price{ font-size:15rem; font-weight:200; letter-spacing:-.05em; color:var(--bright);
+        font-variant-numeric:tabular-nums; line-height:1; }
+.pricecap{ margin-top:2.2rem; font-size:3.1rem; letter-spacing:.2em;
+           text-transform:uppercase; color:var(--faint); }
+
+.badge{ font-size:5.2rem; font-weight:200; letter-spacing:-.02em; color:var(--bright); }
+.badge small{ display:block; font-size:1.9rem; letter-spacing:.28em; text-transform:uppercase;
+              color:var(--dim); margin-top:1.1rem; }
+
+.bigline{ font-size:10.4rem; font-weight:200; letter-spacing:-.035em; color:var(--bright); line-height:1; }
+.headline{ font-size:6.8rem; font-weight:200; line-height:1.16; letter-spacing:-.028em; color:var(--bright); }
+.why{ font-size:5.2rem; font-weight:200; line-height:1.32; letter-spacing:-.02em;
+      color:var(--faint); max-width:84rem; }
+
+.chips{ display:flex; flex-wrap:wrap; gap:1.4rem; justify-content:center; width:80rem; }
+.chip{ border:1px solid var(--hairline); padding:1.6rem 2.8rem; font-size:2.8rem;
+       letter-spacing:.06em; color:var(--muted); opacity:0; }
+
+.seats{ display:flex; gap:3.4rem; }
+.seat{ width:11rem; height:11rem; border:1px solid var(--faint); opacity:0; }
+.seat.taken{ background:var(--bright); border-color:var(--bright); }
+.seatcap{ margin-top:5.6rem; font-size:4.2rem; font-weight:200; letter-spacing:-.01em; color:var(--bright); }
+.seatcap2{ margin-top:1.8rem; font-size:2.4rem; letter-spacing:.26em;
+           text-transform:uppercase; color:var(--dim); }
+
+.bar{ width:74rem; height:1px; background:var(--hairline); }
+.cta{ margin:4.4rem 0; font-size:7.4rem; font-weight:200; letter-spacing:-.03em;
+      color:var(--bright); line-height:1.1; }
+.url{ font-size:5.4rem; font-weight:300; letter-spacing:-.018em; color:var(--bright); }
+.note{ margin-top:3.4rem; font-size:3.0rem; color:var(--faint); letter-spacing:-.005em; }
+.mark{ position:absolute; bottom:9rem; font-size:2.2rem; letter-spacing:.34em;
+       text-transform:uppercase; color:var(--faint); }

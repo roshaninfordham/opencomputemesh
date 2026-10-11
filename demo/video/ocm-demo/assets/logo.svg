@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 32 32" role="img" aria-label="OpenComputeMesh logo">
+  <title>OpenComputeMesh</title>
+  <path d="M6 6L26 6L16 26Z" stroke="#15201d" stroke-width="2" stroke-linejoin="round" fill="none"/>
+  <g fill="#2457d6">
+    <circle cx="6" cy="6" r="4"/>
+    <circle cx="26" cy="6" r="4"/>
+    <circle cx="16" cy="26" r="4"/>
+  </g>
+</svg>
