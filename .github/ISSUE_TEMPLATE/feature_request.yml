@@ -1,0 +1,21 @@
+name: Feature request
+description: Propose a change to how the mesh runs, measures or accounts for work
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Who is this for and what problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: honesty
+    attributes:
+      label: How is it measured?
+      description: Any new number shown to users needs a source and a provenance label. Say where it comes from.
