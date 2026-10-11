@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { ago, api, ApiError, bytes, ms, occ, shortId, type Benchmark, type Ledger, type Member, type Network, type NodeView, type Receipt, type Usage } from "./lib/api";
+import { ago, api, ApiError, bytes, ms, occ, shortId, type Benchmark, type Ledger, type Member, type Network, type NodeView, type Receipt, type Throughput, type Usage } from "./lib/api";
 import { useMesh } from "./lib/mesh";
-import { Button, CopyButton, Empty, ErrorNote, Metric, NodeStatus, Panel, Qr, ReceiptView } from "./components";
+import { Button, CopyButton, Empty, ErrorNote, Metric, NodeStatus, Panel, Qr, ReceiptView, ThroughputChart } from "./components";
 
 export type Go = (path: string) => void;
 
@@ -91,6 +91,7 @@ export function Overview({ member, go }: { member: Member; go: Go }) {
   const { data: ledger } = useFetch<Ledger>("/api/v1/me/ledger?limit=5", [network]);
   const { data: usage } = useFetch<Usage>("/api/v1/me/usage", [network]);
   const { data: invite } = useFetch<{ join_path: string }>("/api/v1/network/join-info");
+  const { data: throughput, error: throughputError } = useFetch<Throughput>("/api/v1/network/throughput?minutes=60", [network]);
   const inviteUrl = invite ? `${location.origin}${invite.join_path}` : "";
   return (
     <div className="space-y-6">
@@ -150,6 +151,13 @@ export function Overview({ member, go }: { member: Member; go: Go }) {
             </ol>
           ) : <Empty>No requests yet.</Empty>}
         </Panel>
+        {throughputError ? <Panel title="Throughput (last hour)" className="lg:col-span-3"><p className="text-sm text-muted">Time-series metrics unavailable: {throughputError}</p></Panel>
+          : throughput?.enabled ? (
+          <Panel title="Throughput (last hour)" className="lg:col-span-3">
+            <ThroughputChart buckets={throughput.buckets} minutes={throughput.minutes} />
+            <p className="mt-2 text-xs text-muted">From Tiger Data continuous aggregate <code>ocm_job_metrics_1m</code></p>
+          </Panel>
+        ) : null}
       </div>
     </div>
   );

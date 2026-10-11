@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import QRCode from "qrcode";
-import { ms, occ, type Receipt } from "./lib/api";
+import { ms, occ, type Receipt, type ThroughputBucket } from "./lib/api";
 
 export function Button({ variant = "primary", className = "", ...p }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "quiet" | "danger" }) {
   const v = {
@@ -126,6 +126,52 @@ export function ReceiptView({ r, browser }: { r: Receipt; browser?: { e2e: numbe
         {r.hosted_api_equivalent.available
           ? <>Hypothetical hosted API equivalent: ${r.hosted_api_equivalent.usd} at {r.hosted_api_equivalent.provider} {r.hosted_api_equivalent.provider_model_id} list prices (<a className="underline" href={r.hosted_api_equivalent.source_url} target="_blank" rel="noreferrer">source</a>, checked {r.hosted_api_equivalent.source_checked_at}). Different model, not a savings claim.</>
           : <>Hosted API equivalent: {r.hosted_api_equivalent.configured ? r.hosted_api_equivalent.message : "not configured (needs a sourced, dated reference price)."}</>}
+      </p>
+    </div>
+  );
+}
+
+/** Completed jobs (bars) and exact tokens (line) per minute, straight from the TimescaleDB continuous aggregate. */
+export function ThroughputChart({ buckets, minutes }: { buckets: ThroughputBucket[]; minutes: number }) {
+  const MIN = 60_000;
+  const end = Math.floor(Date.now() / MIN) * MIN;
+  const slots = Array.from({ length: minutes }, (_, i) => ({ t: end - (minutes - 1 - i) * MIN, completed: 0, tokens: null as number | null, rows: 0 }));
+  const at = new Map(slots.map((s) => [s.t, s]));
+  for (const b of buckets) {
+    const s = at.get(Math.floor(new Date(b.bucket).getTime() / MIN) * MIN);
+    if (!s) continue;
+    s.rows += 1;
+    s.completed += b.completed;
+    // Tokens are summed only from exact runtime-reported usage; null stays unknown, never 0.
+    if (b.input_tokens !== null || b.output_tokens !== null) s.tokens = (s.tokens ?? 0) + (b.input_tokens ?? 0) + (b.output_tokens ?? 0);
+  }
+  for (const s of slots) if (!s.rows) s.tokens = 0; // no row in the aggregate means no jobs that minute
+  const completed = slots.reduce((a, s) => a + s.completed, 0);
+  const known = slots.filter((s) => s.tokens !== null);
+  const tokens = known.length ? known.reduce((a, s) => a + (s.tokens ?? 0), 0) : null;
+  const W = 600, H = 120, bw = W / minutes;
+  const maxJobs = Math.max(1, ...slots.map((s) => s.completed));
+  const maxTok = Math.max(1, ...known.map((s) => s.tokens ?? 0));
+  const line = slots.map((s, i) => (s.tokens === null ? null : `${(i + 0.5) * bw},${H - (s.tokens / maxTok) * (H - 6)}`)).filter(Boolean).join(" ");
+  return (
+    <div>
+      <dl className="mb-3 grid grid-cols-2 gap-4">
+        <Metric label="Completed jobs" value={completed.toLocaleString()} />
+        <Metric label="Tokens (exact, in + out)" value={tokens === null ? null : tokens.toLocaleString()} />
+      </dl>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-28 w-full" role="img"
+        aria-label={`${completed} completed jobs and ${tokens ?? "unknown"} tokens in the last ${minutes} minutes`}>
+        <line x1="0" y1={H - 0.5} x2={W} y2={H - 0.5} className="stroke-line" />
+        {slots.map((s, i) => s.completed > 0 && (
+          <rect key={s.t} x={i * bw + 1} width={Math.max(1, bw - 2)} y={H - (s.completed / maxJobs) * (H - 6)} height={(s.completed / maxJobs) * (H - 6)} className="fill-mesh/70">
+            <title>{`${new Date(s.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}: ${s.completed} completed, ${s.tokens ?? "unknown"} tokens`}</title>
+          </rect>))}
+        {tokens !== null && tokens > 0 && <polyline points={line} fill="none" className="stroke-ink" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />}
+      </svg>
+      <div className="mt-1 flex justify-between text-xs text-muted"><span>{minutes} min ago</span><span>now</span></div>
+      <p className="mt-2 flex flex-wrap gap-x-4 text-xs text-muted">
+        <span><span aria-hidden className="mr-1 inline-block h-2 w-2 rounded-sm bg-mesh/70" />completed jobs</span>
+        <span><span aria-hidden className="mr-1 inline-block h-0.5 w-3 bg-ink align-middle" />tokens</span>
       </p>
     </div>
   );

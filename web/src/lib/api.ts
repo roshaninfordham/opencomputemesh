@@ -38,6 +38,9 @@ export type BenchSide = { id: string; status: string; node_name: string | null; 
   settled_credits: number | null; receipt: Receipt };
 export type Benchmark = { id: string; model_id: string; model_digest: string | null; comparison_status: string; local: BenchSide; remote: BenchSide;
   difference: { end_to_end_ms: number; percent: number } | null; caveat: string; created_at: string };
+export type ThroughputBucket = { bucket: string; model_id: string; jobs: number; completed: number; input_tokens: number | null; output_tokens: number | null;
+  avg_ttft_ms: number | null; p95_ttft_ms: number | null; avg_e2e_ms: number | null; p95_e2e_ms: number | null; avg_tokens_per_second: number | null };
+export type Throughput = { enabled: false } | { enabled: true; source: string; minutes: number; buckets: ThroughputBucket[]; buffered_rows: number; dropped_rows: number };
 
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number, public details?: unknown) { super(message); }
