@@ -80,6 +80,10 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 """
 
 
+# measured_credits: uncapped tariff cost of the reported usage; settlement_capped: 1 if the debit was cut to the hold.
+ADDED_COLUMNS = {"jobs": {"measured_credits": "INTEGER", "settlement_capped": "INTEGER"}}
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -105,6 +109,11 @@ def connect(path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    for table, cols in ADDED_COLUMNS.items():  # idempotent upgrade of databases created before the column existed
+        have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in cols.items():
+            if name not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
     conn.execute("PRAGMA user_version=1")
     return conn
 

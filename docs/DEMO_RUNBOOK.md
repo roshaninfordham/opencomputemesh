@@ -142,7 +142,7 @@ You can also open the tunnel URL in a second host tab to show the audience's vie
 | 0:30 | Point at the member count going up. Open Nodes. | "Joining doesn't share your computer. Compute is shared only by running this agent next to Ollama. It connects out, opens no ports, and talks to Ollama on localhost." Show the host node with its CPU, memory, GPU source and the `qwen2.5:1.5b` digest. |
 | 1:00 | Go to "Run a model". Choose `qwen2.5:1.5b` and send a short prompt. | "The coordinator picks one online worker that has this exact model and streams the tokens back as they are generated." |
 | 1:30 | Open the receipt. | "Token counts come from Ollama itself and are labelled as such. Tokens per second is eval count over eval duration. These are runtime, worker and coordinator timings, plus what this browser saw. Nothing here is estimated." |
-| 2:00 | Show the credits section and "My usage". | "A worst-case hold was taken first. After the run, I'm debited the measured cost and the node owner is credited exactly the same amount. The ledger is append-only." Optionally run `uv run ocm check-ledger` on screen. |
+| 2:00 | Show the credits section and "My usage". | "A worst-case hold was taken first. After the run, I'm debited the measured cost, capped at that hold, and the node owner is credited exactly the same amount. The ledger is append-only." Optionally run `uv run ocm check-ledger` on screen. |
 | 2:30 | If an audience member has enrolled a node, send another prompt and show it routed to their machine. Otherwise pause the host node (from the `127.0.0.1` tab that owns it) and show `MODEL_UNAVAILABLE`, then resume. | "One request runs on one machine. There is no sharding. The person whose machine runs my prompt can see it, so don't send secrets." |
 | 3:00 | End. | Point at the Limitations section of the README. |
 
@@ -176,7 +176,7 @@ No node that is `ONLINE`, sharing and connected advertises that exact model ID. 
 
 ### `INSUFFICIENT_CREDITS`
 
-The worst-case hold is larger than the balance. The hold is `ceil(chars/2)+16` per message plus 16 input tokens at 1 OCC per 1k, plus `max_tokens` at 3 OCC per 1k. Lower `max_tokens`, or start the next demo with a fresh database. There is no top-up endpoint. Grants are given once, on join.
+The worst-case hold is larger than the balance. The hold is `ceil(chars/2)+16` per message plus 64 input tokens at 1 OCC per 1k, plus `max_tokens` at 3 OCC per 1k. Lower `max_tokens`, or start the next demo with a fresh database. There is no top-up endpoint. Grants are given once, on join.
 
 ### `BAD_ORIGIN`
 

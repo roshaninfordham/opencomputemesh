@@ -518,10 +518,13 @@ class Hub:
                     tariff = row(self.db, "SELECT * FROM tariffs WHERE version = ?", job["tariff_version"])
                     # Usage is node-reported: never charge more than the hold the requester agreed to.
                     # ponytail: underpays the provider if the input-token estimate was ever too low.
-                    amount = min(ledger.cost_micro(tariff, m["input_tokens"], m["output_tokens"]), job["reserved_credits"])
+                    measured = ledger.cost_micro(tariff, m["input_tokens"], m["output_tokens"])
+                    amount = min(measured, job["reserved_credits"])
                     ledger.settle(self.db, job, job["provider_member_id"], amount)
-                    fields.update(settled_credits=amount, settlement_status="settled")
-                    log_event(self.db, job_id, "credit_settled", amount_micro_occ=amount)
+                    fields.update(settled_credits=amount, settlement_status="settled", measured_credits=measured,
+                                  settlement_capped=int(measured > amount))
+                    log_event(self.db, job_id, "credit_settled", amount_micro_occ=amount, measured_micro_occ=measured,
+                              capped=measured > amount)
                 else:
                     # No exact usage: hold returned, provider not paid, job shown as unsettled.
                     ledger.release(self.db, job)
@@ -606,6 +609,7 @@ class Hub:
                                       "output_occ_per_1k": ledger.format_occ(tariff["output_micro_per_1k"]),
                                       "min_charge_occ": ledger.format_occ(tariff["min_charge_micro"])},
                 "reserved_micro_occ": j["reserved_credits"], "settled_micro_occ": j["settled_credits"],
+                "measured_micro_occ": j["measured_credits"], "capped": bool(j["settlement_capped"]),
                 "settlement_status": j["settlement_status"],
                 "entries": entries,
             },

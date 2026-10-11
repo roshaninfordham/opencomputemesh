@@ -25,7 +25,7 @@ export type Receipt = {
   tokens_per_second: number | null; retry_count: number; cancel_effect: string | null;
   timestamps: Record<string, string | null>;
   credits: { tariff: { version: string; input_occ_per_1k: string; output_occ_per_1k: string; min_charge_occ: string } | null;
-    reserved_micro_occ: number; settled_micro_occ: number | null; settlement_status: string; entries: LedgerEntry[] };
+    reserved_micro_occ: number; settled_micro_occ: number | null; measured_micro_occ: number | null; capped: boolean; settlement_status: string; entries: LedgerEntry[] };
   hosted_api_equivalent: { configured: boolean; available?: boolean; message?: string; usd?: string; provider?: string; provider_model_id?: string; source_url?: string; source_checked_at?: string; label?: string };
 };
 export type UsageSide = { by_model: { model_id: string; jobs: number; completed: number; input_tokens: number; output_tokens: number; worker_ms: number; settled_micro_occ: number }[];

@@ -490,7 +490,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tariff = hub.active_tariff(member["network_id"])
         return {"balance_micro_occ": ledger.balance(db, member["id"]), "totals_by_type": sums, "entries": entries,
                 "explanation": ("Balance = sum of your append-only ledger entries. Each request holds a worst-case reservation, "
-                                "then settles: the hold is released, you are debited the measured cost, and the worker's owner "
+                                "then settles: the hold is released, you are debited the measured cost (capped at the hold), and the worker's owner "
                                 "is rewarded the same amount. OCC are non-cash demo accounting units."),
                 "tariff": {"version": tariff["version"], "input_occ_per_1k": ledger.format_occ(tariff["input_micro_per_1k"]),
                            "output_occ_per_1k": ledger.format_occ(tariff["output_micro_per_1k"]),

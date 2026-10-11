@@ -151,6 +151,7 @@ async def test_routing_streaming_and_settlement(server):
     r = done["receipt"]
     assert r["tokens"] == {"input": 20, "output": 3, "total": 23, "source": "runtime_reported"}
     assert r["credits"]["settled_micro_occ"] == 29_000 and r["credits"]["settlement_status"] == "settled"
+    assert r["credits"]["capped"] is False and r["credits"]["measured_micro_occ"] == 29_000
     assert balances(app, req, prov) == [100_000_000 - 29_000, 100_000_000 + 29_000]
     assert ledger.consistency_report(app.state.db)["ok"]
     # Unknown model -> clear error with real alternatives.
@@ -295,6 +296,12 @@ async def test_overreported_usage_is_capped_at_the_hold(server):
     done, _ = await until(ws, "request.completed")
     c = done["receipt"]["credits"]
     assert c["settled_micro_occ"] == c["reserved_micro_occ"] > 0
+    assert c["capped"] is True and c["measured_micro_occ"] == ledger.cost_micro(
+        app.state.hub.active_tariff("demo"), 10**9, 10**9) > c["reserved_micro_occ"]
+    meta = app.state.db.execute("SELECT safe_metadata_json FROM job_events WHERE job_id = ? AND event_type = 'credit_settled'",
+                                (done["request_id"],)).fetchone()[0]
+    assert json.loads(meta) == {"amount_micro_occ": c["reserved_micro_occ"], "capped": True,
+                                "measured_micro_occ": c["measured_micro_occ"]}
     assert balances(app, req, prov) == [100_000_000 - c["reserved_micro_occ"], 100_000_000 + c["reserved_micro_occ"]]
     assert ledger.consistency_report(app.state.db)["ok"]
     await ws.close(); await node.close()

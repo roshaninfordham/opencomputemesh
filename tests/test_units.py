@@ -52,6 +52,17 @@ def test_tariff_rounding():
     assert ledger.cost_micro({**TARIFF, "input_micro_per_1k": 1}, 1, 0) == 1  # rounds up, never down to 0
     assert ledger.cost_micro({**TARIFF, "min_charge_micro": 500_000}, 1, 1) == 500_000
     assert ledger.format_occ(68_000) == "0.068" and ledger.format_occ(-100_000_000) == "-100"
+    assert ledger.estimate_input_tokens([{"content": "hi"}]) == 1 + 16 + 64  # README example: 81 tokens
+
+
+def test_added_columns_migrate_old_db_idempotently(tmp_path):
+    p = str(tmp_path / "old.db")
+    old = sqlite3.connect(p)
+    old.executescript(__import__("ocm.db", fromlist=["SCHEMA"]).SCHEMA)  # schema without the added columns
+    old.close()
+    for _ in range(2):
+        cols = {r[1] for r in connect(p).execute("PRAGMA table_info(jobs)")}
+        assert {"measured_credits", "settlement_capped"} <= cols
 
 
 @pytest.fixture

@@ -26,7 +26,8 @@ def cost_micro(tariff: dict, input_tokens: int, output_tokens: int) -> int:
 
 def estimate_input_tokens(messages: list[dict]) -> int:
     # Conservative: ~2 chars/token plus per-message template overhead. Real tokenizers average ~4.
-    return sum(ceil_div(len(m["content"]), 2) + 16 for m in messages) + 16
+    # The +64 per request covers chat-template and model default system-prompt tokens the text never shows.
+    return sum(ceil_div(len(m["content"]), 2) + 16 for m in messages) + 64
 
 
 def format_occ(micro: int) -> str:
