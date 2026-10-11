@@ -1,4 +1,5 @@
-"""OpenComputeMesh node agent: outbound-only WebSocket to the coordinator, loopback-only runtime access."""
+"""OpenComputeMesh node agent: outbound-only WebSocket to the coordinator; a loopback runtime (Ollama) or an
+explicitly opted-in cloud runtime (Gemini)."""
 
 import argparse
 import asyncio
@@ -18,9 +19,13 @@ import psutil
 import websockets
 
 from .protocol import PROTOCOL_VERSION
-from .runtime import InferenceRequest, OllamaAdapter, RuntimeAdapter
+from .runtime import GeminiAdapter, InferenceRequest, OllamaAdapter, RuntimeAdapter
 
 FATAL_CLOSE_CODES = {4003: "node revoked by owner", 4401: "credential or enrollment token rejected"}
+UNREACHABLE = {"ollama": "Ollama is not reachable on loopback. Start it with `ollama serve` and retry.",
+               "gemini": "Gemini API is not reachable or rejected the API key. Check GEMINI_API_KEY and network access."}
+NO_MODELS = {"ollama": "Ollama has no models installed. Pull one yourself first, e.g. `ollama pull qwen2.5:1.5b`.",
+             "gemini": "The Gemini API listed no models supporting generateContent for this API key."}
 
 
 def say(msg: str) -> None:
@@ -125,10 +130,10 @@ class Agent:
 
     async def approve_models(self) -> None:
         if not await self.runtime.health():
-            raise SystemExit("Ollama is not reachable on loopback. Start it with `ollama serve` and retry.")
+            raise SystemExit(UNREACHABLE[self.runtime.name])
         installed = {m.model_id for m in await self.runtime.list_models()}
         if not installed:
-            raise SystemExit("Ollama has no models installed. Pull one yourself first, e.g. `ollama pull qwen2.5:1.5b`.")
+            raise SystemExit(NO_MODELS[self.runtime.name])
         if self.models_flag:
             chosen = [m.strip() for m in self.models_flag.split(",") if m.strip()]
         elif self.state.get("approved_models"):
@@ -140,7 +145,7 @@ class Agent:
             raise SystemExit("Pass --models to approve which installed models this node shares.")
         missing = [m for m in chosen if m not in installed]
         if missing or not chosen:
-            raise SystemExit(f"Not installed locally: {', '.join(missing) or '(none chosen)'}. Installed: {', '.join(sorted(installed))}")
+            raise SystemExit(f"Not available from {self.runtime.name}: {', '.join(missing) or '(none chosen)'}. Installed: {', '.join(sorted(installed))}")
         self.state["approved_models"] = chosen
         self.save()
 
@@ -270,19 +275,31 @@ class Agent:
 
 
 def main(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="ocm-agent", description="Share local Ollama models with an OpenComputeMesh network.")
+    p = argparse.ArgumentParser(prog="ocm-agent", description="Share Ollama (local) or Gemini (cloud) models with an OpenComputeMesh network.")
     p.add_argument("--coordinator", default=os.environ.get("OCM_COORDINATOR"),
                    help="Coordinator origin, e.g. https://example.trycloudflare.com (env OCM_COORDINATOR)")
     p.add_argument("--models", help="Comma-separated installed model IDs to share (otherwise asked interactively)")
     p.add_argument("--name", help="Display name shown to the network")
     p.add_argument("--state-dir", default=os.environ.get("OCM_AGENT_STATE_DIR", str(Path.home() / ".opencomputemesh")),
                    help="Where the node credential is stored (use a separate dir per simulated node)")
+    p.add_argument("--runtime", choices=("ollama", "gemini"), default=os.environ.get("OCM_RUNTIME", "ollama"),
+                   help="ollama: loopback runtime on this machine; gemini: Google's cloud API (env OCM_RUNTIME)")
     p.add_argument("--ollama", default=os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434"))
     p.add_argument("--max-jobs", type=int, default=1)
     p.add_argument("--heartbeat", type=int, default=int(os.environ.get("OCM_NODE_HEARTBEAT_INTERVAL_SECONDS", 20)))
     a = p.parse_args(argv)
-    if not is_loopback_url(a.ollama):
-        raise SystemExit("Refusing a non-loopback Ollama URL: the runtime must stay on this machine.")
+    if a.runtime == "gemini":
+        # Popped so child processes never inherit it. Sent only as a header to Google, never to the coordinator.
+        key = (os.environ.pop("GEMINI_API_KEY", "") or os.environ.pop("GOOGLE_API_KEY", "")).strip()
+        if not key:
+            raise SystemExit("--runtime gemini needs GEMINI_API_KEY (or GOOGLE_API_KEY) set in the environment.")
+        runtime: RuntimeAdapter = GeminiAdapter(key)
+    elif a.runtime == "ollama":
+        if not is_loopback_url(a.ollama):
+            raise SystemExit("Refusing a non-loopback Ollama URL: the runtime must stay on this machine.")
+        runtime = OllamaAdapter(a.ollama)
+    else:
+        raise SystemExit(f"Unknown runtime {a.runtime!r} (OCM_RUNTIME): use ollama or gemini.")
     state_dir = Path(a.state_dir).expanduser()
     saved = json.loads((state_dir / "node.json").read_text()) if (state_dir / "node.json").exists() else {}
     coordinator = a.coordinator or saved.get("coordinator")
@@ -290,7 +307,9 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit("Pass --coordinator https://<coordinator-origin> (or set OCM_COORDINATOR).")
     if saved.get("coordinator") and saved["coordinator"] != coordinator.rstrip("/") and saved.get("credential"):
         say("coordinator URL changed; re-using saved node credential (tunnel URLs change on restart)")
-    agent = Agent(coordinator, state_dir, OllamaAdapter(a.ollama), a.models, a.name, a.max_jobs, a.heartbeat)
+    if a.runtime == "gemini":
+        say("cloud runtime: prompts sent to this node are forwarded to Google's Gemini API (generativelanguage.googleapis.com)")
+    agent = Agent(coordinator, state_dir, runtime, a.models, a.name, a.max_jobs, a.heartbeat)
     try:
         asyncio.run(agent.run_forever())
     except KeyboardInterrupt:
