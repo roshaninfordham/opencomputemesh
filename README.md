@@ -25,7 +25,7 @@ The comparison shown ran both nodes on the same Mac, so it demonstrates the mech
 | Coordinator | `ocm/app.py`, `ocm/hub.py`, `ocm/ledger.py`, `ocm/db.py`, `ocm/config.py`, `ocm/cli.py` | FastAPI app (one process). Serves REST, WebSockets, the OpenAI-compatible subset and the built web app. Stores everything durable in SQLite (WAL mode). |
 | Node agent | `ocm/agent.py`, `ocm/runtime.py` (CLI `ocm-agent`) | Outbound-only WebSocket client. Enrolls with a one-time token, then runs jobs against local Ollama and streams tokens back. |
 | Web app | `web/` (React + Vite) | Built to `web/dist` and served by the coordinator from the same origin. Join, run a model, view receipts, nodes, usage and the ledger. |
-| Rust agent (alternative, in progress) | `crates/ocm-node` | A Rust node agent, binary `ocm-node`, intended to take the same flags as `ocm-agent`. Build with `cargo build --release --manifest-path crates/ocm-node/Cargo.toml`. It is still under development; the Python agent is the one covered by the tests here. |
+| Rust agent (alternative) | `crates/ocm-node` | A Rust node agent, binary `ocm-node`, with the same flags, environment variables and `<state-dir>/node.json` state file as `ocm-agent`. Build with `cargo build --release --manifest-path crates/ocm-node/Cargo.toml`. Covered by its own `cargo test` suite and verified end to end against the coordinator. |
 
 ## Quick start
 
@@ -305,6 +305,7 @@ uv run pytest -q
 
 - `tests/test_units.py`: NDJSON decoding, metric normalization, tariff rounding, ledger reserve, settle, release and reversal, append-only triggers, and the state machine.
 - `tests/test_integration.py`: a real coordinator with fake WebSocket nodes. Covers routing, streaming and settlement, idempotent replay, worker errors, retry on another worker after a disconnect, timeout and cancel, insufficient credits, pause and authorization, and rejection of reports on foreign jobs.
+- `tests/test_agent.py`: Python node agent units: loopback-only Ollama URL parsing, enrollment-token reuse after a failed attempt, and proxy settings ignored for runtime traffic.
 - `tests/test_real_ollama.py`: streams from a local Ollama and checks the runtime counters. It is skipped (not passed) if Ollama is unreachable or the model (`OCM_SMOKE_MODEL`, default `qwen2.5:1.5b`) is not installed.
 
 `scripts/demo_preflight.sh` runs the checks a demo host needs (see the runbook).
@@ -312,7 +313,7 @@ uv run pytest -q
 What has been verified by hand:
 
 - A real prompt was routed through the coordinator to an Ollama node. It returned runtime-reported token counts and a balanced ledger transfer.
-- The full flow was run through a Cloudflare Quick Tunnel:
+- The full flow was run through a Cloudflare Quick Tunnel (this run predates the current security headers; not yet re-verified with them):
   - The `Secure` cookie was set via `X-Forwarded-Proto`.
   - Cross-origin POSTs were rejected.
   - Browser WebSocket streaming worked.
