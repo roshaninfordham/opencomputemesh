@@ -1,8 +1,15 @@
+<p align="center">
+  <img src="docs/images/banner.svg" alt="OpenComputeMesh: share compute, run models, see every token" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/roshaninfordham/opencomputemesh/actions/workflows/ci.yml"><img src="https://github.com/roshaninfordham/opencomputemesh/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/python-3.12%2B-2457d6.svg" alt="Python 3.12+">
+  <img src="https://img.shields.io/badge/rust-node%20agent-15201d.svg" alt="Rust node agent">
+</p>
+
 # OpenComputeMesh
-
-[![CI](https://github.com/roshaninfordham/opencomputemesh/actions/workflows/ci.yml/badge.svg)](https://github.com/roshaninfordham/opencomputemesh/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-
-Share compute. Run models. See every token.
 
 OpenComputeMesh v0.1 lets a small group pool the language models they already run locally with [Ollama](https://ollama.com). One person runs a coordinator. Others join it in a browser, and anyone who wants to contribute compute runs a small node agent next to their own Ollama. A prompt sent from the web app (or the OpenAI-compatible API) is routed to one online worker that has the exact model. The tokens stream back, and each request gets a receipt that shows runtime-reported token counts, timings, and the OpenCompute Credits (OCC) moved between requester and provider.
 

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="OpenComputeMesh: share compute, run models, see every token">
+  <title>OpenComputeMesh: share compute, run models, see every token</title>
+  <defs>
+    <style>
+      .t { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+  <rect width="1280" height="360" rx="20" fill="#f3f5f3"/>
+
+  <!-- mark + wordmark -->
+  <g transform="translate(72 92) scale(2.6)">
+    <path d="M6 6L26 6L16 26Z" stroke="#15201d" stroke-width="2" stroke-linejoin="round" fill="none"/>
+    <g fill="#2457d6"><circle cx="6" cy="6" r="4"/><circle cx="26" cy="6" r="4"/><circle cx="16" cy="26" r="4"/></g>
+  </g>
+  <text x="172" y="140" class="t" font-size="54" font-weight="700" fill="#15201d" letter-spacing="-1">OpenComputeMesh</text>
+  <text x="74" y="208" class="t" font-size="30" fill="#15201d">Share compute. Run models. See every token.</text>
+  <text x="74" y="252" class="t" font-size="20" fill="#56645f">Peer-to-peer AI inference on the machines people already own,</text>
+  <text x="74" y="280" class="t" font-size="20" fill="#56645f">with runtime-reported tokens, measured latency and a balanced credit ledger.</text>
+
+  <!-- the mesh: nodes connect outbound to one coordinator; one request is routed -->
+  <g transform="translate(800 40)">
+    <g stroke="#c4cdc9" stroke-width="2">
+      <line x1="200" y1="140" x2="70" y2="40"/>
+      <line x1="200" y1="140" x2="330" y2="50"/>
+      <line x1="200" y1="140" x2="360" y2="200"/>
+      <line x1="200" y1="140" x2="250" y2="270"/>
+      <line x1="200" y1="140" x2="40" y2="220"/>
+    </g>
+    <!-- routed request path -->
+    <path d="M40 220 L200 140 L330 50" stroke="#2457d6" stroke-width="4" fill="none" stroke-linecap="round" stroke-dasharray="2 10"/>
+
+    <!-- coordinator -->
+    <rect x="130" y="110" width="140" height="60" rx="12" fill="#15201d"/>
+    <text x="200" y="137" class="t" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">coordinator</text>
+    <text x="200" y="155" class="t" font-size="11" fill="#c9d3cf" text-anchor="middle">route, meter, settle</text>
+
+    <!-- nodes -->
+    <g fill="#ffffff" stroke="#d6ddda" stroke-width="2">
+      <circle cx="70" cy="40" r="22"/><circle cx="360" cy="200" r="22"/><circle cx="250" cy="270" r="22"/>
+    </g>
+    <circle cx="330" cy="50" r="24" fill="#2457d6"/>
+    <circle cx="40" cy="220" r="22" fill="#ffffff" stroke="#2457d6" stroke-width="3"/>
+    <g class="t" font-size="11" text-anchor="middle" fill="#56645f">
+      <text x="70" y="44">gpu</text><text x="360" y="204">mac</text><text x="250" y="274">pc</text>
+    </g>
+    <text x="330" y="54" class="t" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="600">worker</text>
+    <text x="40" y="224" class="t" font-size="11" fill="#2457d6" text-anchor="middle" font-weight="600">you</text>
+
+    <!-- receipt chip -->
+    <rect x="282" y="120" width="150" height="26" rx="13" fill="#e6ecfb"/>
+    <text x="357" y="137" class="mono" font-size="11" fill="#2457d6" text-anchor="middle">tokens in, out, ms</text>
+  </g>
+</svg>
