@@ -2,6 +2,8 @@
 
 This runbook is for the person hosting a live demo. The demo host machine runs the coordinator, the tunnel and one node agent. Audience members join from their phones or laptops through the tunnel URL, and optionally run their own agent.
 
+Optional Tiger Data, Sentry and Gemini steps are in [Optional sponsor integrations](#optional-sponsor-integrations).
+
 Use `qwen2.5:1.5b`. With Ollama 0.17.7, `qwen3:4b` ignores `think: false` and prints its reasoning in the answer.
 
 ## 1. Host preflight
@@ -134,6 +136,70 @@ uv run python -c "import segno,sys; segno.make(sys.argv[1]).terminal(compact=Tru
 
 You can also open the tunnel URL in a second host tab to show the audience's view. That tab is a separate member. Do owner actions (pause, resume, usage, benchmarks) in the tab where you enrolled the node.
 
+## Optional sponsor integrations
+
+Each of these is independent and off by default. Set them up before the preflight so the coordinator starts with them. Install both extras in one command: `uv sync --extra tiger --extra sentry` (a later `uv sync` without `--extra` removes them).
+
+### Tiger Data (TimescaleDB metrics and the throughput chart)
+
+1. Start a local TimescaleDB on loopback (the same address the tests use by default):
+
+   ```bash
+   docker run -d --name ocm-timescale -p 127.0.0.1:55432:5432 \
+     -e POSTGRES_PASSWORD=ocmlocal -e POSTGRES_DB=ocm timescale/timescaledb:latest-pg17
+   ```
+
+2. Check the extension is present in the `ocm` database (the coordinator creates tables, policies and the aggregate, but not the extension):
+
+   ```bash
+   docker exec ocm-timescale psql -U postgres -d ocm -tAc \
+     "select extversion from pg_extension where extname='timescaledb'"
+   ```
+
+   Expected output: a version such as `2.30.2`. If it prints nothing, run `docker exec ocm-timescale psql -U postgres -d ocm -c "CREATE EXTENSION IF NOT EXISTS timescaledb"`.
+
+3. Start the coordinator with the URL:
+
+   ```bash
+   OCM_TIMESCALE_URL=postgresql://postgres:ocmlocal@127.0.0.1:55432/ocm uv run ocm serve
+   ```
+
+   Expected log line: `timeseries: connected to TimescaleDB, schema ready`.
+
+4. Optional check: `uv run pytest -q tests/test_timeseries.py` should report 4 passed (it uses its own `ocm_test` schema).
+
+For a hosted Tiger Cloud service, use its connection string as `OCM_TIMESCALE_URL` instead. That path has not been tested.
+
+**Show it:** after a few prompts, the Overview page shows the "Throughput (last hour)" panel, fed by the continuous aggregate `ocm_job_metrics_1m`. New jobs appear within seconds because the aggregate uses real-time aggregation. To show the raw data:
+
+```bash
+docker exec ocm-timescale psql -U postgres -d ocm -c \
+  "select bucket, model_id, jobs, completed, output_tokens, p95_ttft_ms from ocm_job_metrics_1m order by bucket desc limit 5"
+```
+
+### Sentry (error monitoring)
+
+```bash
+SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project> uv run ocm serve
+```
+
+Add `OCM_TIMESCALE_URL=...` on the same line to run both. `SENTRY_TRACES_SAMPLE_RATE` (default 0) enables performance traces. Without a DSN nothing is sent. Delivery to a live Sentry project has not been tested.
+
+**Show it:** there is no route that raises on purpose. Show the scrubbing instead: run `uv run pytest -q tests/test_observability.py` (5 passed) and open `ocm/observability.py` to point at `send_default_pii=False`, `max_request_body_size="never"` and the `before_send` scrubbers. If a real error reaches your Sentry project during the demo, open it and show that the request has no body, cookies or query string and that tokens and join codes read `[redacted]`.
+
+### Gemini node (cloud runtime)
+
+Run a second agent on the host with its own state directory, so it does not reuse the Ollama node's credential. Create a new enrollment token first (Nodes, "Share my compute").
+
+```bash
+OCM_RUNTIME=gemini GEMINI_API_KEY=<key> uv run ocm-agent --runtime gemini \
+  --models gemini-2.5-flash --coordinator http://127.0.0.1:8000 --name gemini-node --state-dir ~/.ocm-gemini
+```
+
+Expected output includes `cloud runtime: prompts sent to this node are forwarded to Google's Gemini API (generativelanguage.googleapis.com)` and then `online; sharing gemini-2.5-flash`. If the agent exits with `Not available from gemini`, it prints the model IDs your key can use; pick one of those. This command has not been run against the live API (no key was available), so rehearse it.
+
+**Show it:** on "Run a model" choose the Gemini model. The receipt shows the Gemini node, token counts from Gemini's `usageMetadata` labelled runtime-reported, measured worker time and time to first token, and empty runtime durations (Gemini does not report them). The credit transfer settles like any other job. Say that prompts sent to this node go to Google.
+
 ## 4. Three-minute demo script
 
 | Time | Action | Say |
@@ -144,6 +210,7 @@ You can also open the tunnel URL in a second host tab to show the audience's vie
 | 1:30 | Open the receipt. | "Token counts come from Ollama itself and are labelled as such. Tokens per second is eval count over eval duration. These are runtime, worker and coordinator timings, plus what this browser saw. Nothing here is estimated." |
 | 2:00 | Show the credits section and "My usage". | "A worst-case hold was taken first. After the run, I'm debited the measured cost, capped at that hold, and the node owner is credited exactly the same amount. The ledger is append-only." Optionally run `uv run ocm check-ledger` on screen. |
 | 2:30 | If an audience member has enrolled a node, send another prompt and show it routed to their machine. Otherwise pause the host node (from the `127.0.0.1` tab that owns it) and show `MODEL_UNAVAILABLE`, then resume. | "One request runs on one machine. There is no sharding. The person whose machine runs my prompt can see it, so don't send secrets." |
+| 2:45 | Optional, if enabled: show the Throughput panel (Tiger Data), the Gemini node's receipt, or the Sentry scrubbing (see "Optional sponsor integrations"). | "Job metrics stream into a TimescaleDB hypertable and a continuous aggregate draws this chart. A Gemini node plugs in behind the same adapter as Ollama. Sentry is on, and it scrubs prompts and tokens before anything leaves." |
 | 3:00 | End. | Point at the Limitations section of the README. |
 
 ## 5. Troubleshooting
@@ -162,7 +229,7 @@ You can also open the tunnel URL in a second host tab to show the audience's vie
 The agent exits at startup in these cases:
 
 - `Ollama has no models installed`: run `ollama pull qwen2.5:1.5b` on that machine, then start the agent again.
-- `Not installed locally: <model>`: run `ollama pull <model>` on that machine, then start the agent again.
+- `Not available from ollama: <model>` (Python agent) or `Not installed locally: <model>` (Rust agent): run `ollama pull <model>` on that machine, then start the agent again.
 
 If you pull a model while the agent is running, click "Refresh models" for the node. The agent shares only models that are in its approved list. That list is saved in the state file the first time `--models` is passed, so pass `--models` again to change it.
 
