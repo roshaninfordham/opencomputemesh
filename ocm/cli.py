@@ -6,6 +6,7 @@ import uvicorn
 
 from .app import create_app, resolve_join_code
 from .config import Settings
+from .observability import init_sentry
 
 
 def main(argv=None) -> None:
@@ -33,6 +34,7 @@ def main(argv=None) -> None:
         raise SystemExit(0 if report["ok"] else 1)
     else:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+        init_sentry()  # no-op unless SENTRY_DSN is set
         app = create_app(s)
         print(f"Join path: /join/{app.state.join_code}", flush=True)
         # One worker only: live sockets are owned by this process. Trust X-Forwarded-* from the local tunnel.
