@@ -77,9 +77,9 @@ Each layer is a slot with one interface. The box borders show what is built and 
 | Layer | Default | Also built | Status |
 |---|---|---|---|
 | Model runtime | Ollama on `127.0.0.1` (`ocm/runtime.py` `OllamaAdapter`) | Gemini API (`GeminiAdapter`, `ocm-agent --runtime gemini`) | Ollama verified end to end. Gemini is unit-tested against the documented API format; a live run needs `GEMINI_API_KEY`. |
-| Node agent | Python `ocm-agent` | Rust `ocm-node` (single binary) | Both verified against the coordinator, including over a public `wss://` tunnel. |
+| Node agent | Python `ocm-agent` | Rust `ocm-node` (single binary, Ollama only) | Both verified against the coordinator, including over a public `wss://` tunnel. |
 | Jobs and ledger | SQLite in WAL mode | n/a (Postgres is an extension point) | Verified. |
-| Time-series metrics | Off | Tiger Data / TimescaleDB sink (`ocm/timeseries.py`, `OCM_TIMESCALE_URL`): hypertable `ocm_job_metrics`, continuous aggregate `ocm_job_metrics_1m`, compression policy, live throughput chart | Verified against TimescaleDB 2.30 locally; not yet against a hosted Tiger Cloud service. |
+| Time-series metrics | Off | Tiger Data / TimescaleDB sink (`ocm/timeseries.py`, `OCM_TIMESCALE_URL`): hypertable `ocm_job_metrics`, continuous aggregate `ocm_job_metrics_1m`, compression policy, live throughput chart | Verified against TimescaleDB 2.30.2 locally; not yet against a hosted Tiger Cloud service. |
 | Error monitoring | Logs | Sentry (`ocm/observability.py`, `SENTRY_DSN`), with scrubbers that drop prompts, outputs, cookies, tokens and join codes | Scrubbing verified through the real SDK with an in-memory transport; live delivery needs a DSN. |
 
 Snowflake and Nimble are not integrated.
@@ -455,6 +455,23 @@ Known runtime quirk: with Ollama 0.17.7, `qwen3:4b` ignores `think: false` and e
 - **Time-series metrics are best effort.** The TimescaleDB copy is buffered in memory (10,000 rows). A long outage drops the oldest rows, and a coordinator restart loses what is buffered. SQLite remains authoritative. Verified on a local TimescaleDB 2.30.2, not on Tiger Cloud.
 - **Sentry is unverified against a live project** and redacts UUIDs (job and node IDs) along with secrets. Gemini thinking tokens are reported by the agent but not stored or charged.
 - **Quick Tunnels are temporary.** Cloudflare Quick Tunnel URLs are random, change on every restart, and are meant for demos, not production. When the URL changes, restart agents with the new `--coordinator`; they reuse their saved credential.
+
+## What we learned
+
+- **rustls 0.23 needs a crypto provider chosen at runtime.** The Rust agent worked against `http://` coordinators and panicked on its first `wss://` handshake, because no rustls provider feature was enabled. The fix pins `ring` in `Cargo.toml` and calls `install_default()` at startup (`crates/ocm-node/src/main.rs`, `install_tls_provider`). We only found it by connecting through a real tunnel.
+- **Usage reported by a node has to be distrusted.** Modelling a dishonest node that inflates its token counts led to capping settlement at the hold the requester agreed to: `min(measured, reserved)` in `ocm/hub.py`. The receipt discloses the cap (`credits.capped`, `credits.measured_micro_occ`) instead of hiding the underpayment it can cause.
+- **Gemini's stream is not Ollama's stream.** Gemini sends server-sent events whose `data:` payloads can split across network reads, puts text in candidate parts, marks reasoning as `thought` parts, and reports usage in `usageMetadata`. Mapping that onto the existing receipt meant writing an incremental `SSEDecoder`, keeping thinking tokens out of the output count, and leaving durations empty rather than inventing them.
+- **TimescaleDB continuous aggregates can answer before they refresh.** With `materialized_only = false` the aggregate unions materialized buckets with raw rows newer than the watermark, so a job finished seconds ago already shows in the chart. Continuous aggregate DDL also refuses to run inside a transaction, which is why the schema runs statement by statement in autocommit under an advisory lock.
+- **Error monitoring is a data-egress path.** Turning off `send_default_pii` is not enough: request bodies, frame locals, query strings, breadcrumbs and transaction names can all carry prompts or tokens. The Sentry hooks scrub every one of them, and a test drives the real SDK to prove it.
+
+## Judging criteria map
+
+| Criterion | Evidence |
+|---|---|
+| Technology | One-process FastAPI coordinator with a job state machine and append-only micro-OCC ledger ([ocm/hub.py](ocm/hub.py), [ocm/ledger.py](ocm/ledger.py)); two node agents, Python and Rust ([ocm/agent.py](ocm/agent.py), [crates/ocm-node](crates/ocm-node)); pluggable runtimes, Ollama and Gemini ([ocm/runtime.py](ocm/runtime.py)); TimescaleDB hypertable, continuous aggregate and compression ([ocm/timeseries.py](ocm/timeseries.py)); scrubbed Sentry ([ocm/observability.py](ocm/observability.py)). |
+| Design | Every sponsor integration is optional and isolated behind an existing seam (runtime adapter, a non-blocking metrics sink, CLI start-up hook). Metrics carry provenance and stay `null` when not reported ([How metrics are defined](#how-metrics-are-defined)). Outbound-only agents, loopback-only Ollama, no prompt storage ([Security model](#security-model)). Architecture in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). |
+| Completion | 67 Python tests and 9 Rust tests pass ([Testing](#testing)); CI on every push ([ci.yml](.github/workflows/ci.yml)); a web app served from the coordinator, an OpenAI-compatible endpoint, a demo runbook with preflight script ([docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md)); Tiger Data verified against a real TimescaleDB 2.30.2. Not verified live: Gemini (no key) and Sentry (no DSN). |
+| Learning | [What we learned](#what-we-learned), with the commits that record each fix (for example `e87e207` for the rustls provider, `2c76517` for disclosing capped settlements, `b50d4dd` for carrying `done_reason` through to `finish_reason`). |
 
 ## License
 
