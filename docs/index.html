@@ -28,6 +28,8 @@
     .card { background: #fff; border: 2px solid var(--line); border-radius: 16px; padding: 20px 22px; }
     .card h3 { margin: 0 0 6px; font-size: 20px; }
     .card p { margin: 0; color: var(--muted); font-size: 16px; }
+    .card p.status { margin-top: 10px; color: var(--ink); font-size: 14px; }
+    .card code { font-size: 14px; }
     img.arch { width: 100%; border-radius: 16px; margin-top: 8px; }
     footer { margin-top: 48px; color: var(--muted); font-size: 15px; }
   </style>
@@ -47,17 +49,18 @@
     <a class="primary" href="https://github.com/roshaninfordham/opencomputemesh">View the code on GitHub</a>
     <a href="https://github.com/roshaninfordham/opencomputemesh#quick-start">Quick start</a>
     <a href="https://github.com/roshaninfordham/opencomputemesh/blob/main/docs/DEMO_RUNBOOK.md">Demo runbook</a>
+    <a href="https://github.com/roshaninfordham/opencomputemesh/blob/main/docs/SPONSORS.md">Sponsor integrations</a>
   </div>
 
   <h2>Built with our sponsors</h2>
   <div class="sponsors">
-    <div class="card"><h3>Gemini API</h3><p>A runtime adapter any node can share, behind the same interface as local Ollama. Gemini's usage metadata becomes the token counts on every receipt.</p></div>
-    <div class="card"><h3>Tiger Data</h3><p>Every finished job lands in a TimescaleDB hypertable. A continuous aggregate drives the live throughput chart.</p></div>
-    <div class="card"><h3>Sentry</h3><p>Opt-in monitoring for the coordinator, with scrubbers that strip prompts, outputs and secrets before anything is sent.</p></div>
+    <div class="card"><h3>Gemini API</h3><p>A second runtime adapter beside local Ollama: a node owner runs <code>ocm-agent --runtime gemini</code> and shares Gemini models. Gemini's <code>usageMetadata</code> becomes the token counts on that node's receipts; the API key stays on the node.</p><p class="status">Unit-tested against the documented API format. Not run live: no API key was available.</p></div>
+    <div class="card"><h3>Tiger Data</h3><p>When <code>OCM_TIMESCALE_URL</code> is set, every finished job's metrics (never prompts) go to a TimescaleDB hypertable. A continuous aggregate with real-time aggregation drives the Throughput chart.</p><p class="status">Verified live against a local TimescaleDB 2.30.2. Not yet run on Tiger Cloud.</p></div>
+    <div class="card"><h3>Sentry</h3><p>Opt-in error monitoring for the coordinator (<code>SENTRY_DSN</code>), with scrubbers that strip prompts, request bodies, cookies, tokens and join codes before anything is sent.</p><p class="status">Tested through the real SDK with an in-memory transport. Not sent to a live project: no DSN was available.</p></div>
   </div>
 
   <h2>How it fits together</h2>
-  <img class="arch" src="images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator; node agents dial out and run models through pluggable runtime adapters">
+  <img class="arch" src="images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator; node agents dial out and run models through pluggable runtime adapters (Ollama, Gemini API); SQLite ledger, optional Tiger Data metrics and Sentry monitoring">
 
   <footer>Open source under Apache-2.0, and for everyone. And that's OpenComputeMesh.</footer>
 </main>
