@@ -1,0 +1,31 @@
+@import "tailwindcss";
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource/ibm-plex-mono/400.css";
+
+@theme {
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --color-paper: #f3f5f3;
+  --color-surface: #ffffff;
+  --color-ink: #15201d;
+  --color-muted: #56645f;
+  --color-line: #d6ddda;
+  --color-mesh: #2457d6;
+  --color-mesh-soft: #e6ecfb;
+  --color-good: #1d7449;
+  --color-warn: #a35a14;
+  --color-bad: #b42323;
+  --color-seg-queue: #a3b0ab;
+  --color-seg-load: #d2a72a;
+  --color-seg-prompt: #7f9be6;
+  --color-seg-gen: #2457d6;
+  --color-seg-other: #cdd5d2;
+}
+
+html { background: var(--color-paper); color: var(--color-ink); font-family: var(--font-sans); }
+body { font-feature-settings: "tnum" 1; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--color-mesh); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.caret::after { content: ""; display: inline-block; width: .5ch; height: 1.1em; margin-left: 1px; vertical-align: text-bottom;
+  background: var(--color-mesh); animation: blink 1s steps(2) infinite; }
+@keyframes blink { to { opacity: 0; } }
