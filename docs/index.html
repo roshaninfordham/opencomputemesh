@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenComputeMesh: share compute, run models, see every token</title>
+  <meta name="description" content="Open-source peer-to-peer AI inference on the machines people already own, with runtime-reported tokens, measured latency and a balanced credit ledger.">
+  <meta property="og:title" content="OpenComputeMesh">
+  <meta property="og:description" content="Share compute. Run models. See every token.">
+  <meta property="og:image" content="https://img.youtube.com/vi/pevKYZLvLoE/maxresdefault.jpg">
+  <link rel="icon" href="images/logo.svg">
+  <style>
+    :root { --paper:#f3f5f3; --ink:#15201d; --muted:#56645f; --line:#d6ddda; --mesh:#2457d6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    main { max-width: 1040px; margin: 0 auto; padding: 32px 20px 64px; }
+    .banner { width: 100%; display: block; border-radius: 20px; }
+    h1 { font-size: 40px; letter-spacing: -1px; margin: 40px 0 8px; }
+    p.lead { color: var(--muted); max-width: 70ch; margin: 0 0 28px; }
+    .video { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 18px; overflow: hidden; background: #000; box-shadow: 0 30px 80px rgba(21,32,29,.18); }
+    .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    .cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 8px; }
+    .cta a { text-decoration: none; font-weight: 600; padding: 12px 20px; border-radius: 10px; border: 2px solid var(--line); color: var(--ink); background: #fff; }
+    .cta a.primary { background: var(--mesh); border-color: var(--mesh); color: #fff; }
+    .cta a:focus-visible { outline: 3px solid var(--mesh); outline-offset: 2px; }
+    h2 { font-size: 26px; margin: 48px 0 12px; }
+    .sponsors { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    .card { background: #fff; border: 2px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+    .card h3 { margin: 0 0 6px; font-size: 20px; }
+    .card p { margin: 0; color: var(--muted); font-size: 16px; }
+    img.arch { width: 100%; border-radius: 16px; margin-top: 8px; }
+    footer { margin-top: 48px; color: var(--muted); font-size: 15px; }
+  </style>
+</head>
+<body>
+<main>
+  <img class="banner" src="images/banner.svg" alt="OpenComputeMesh: share compute, run models, see every token">
+
+  <h1>Watch the 2-minute demo</h1>
+  <p class="lead">Real captures of the running software: a phone joins, a node agent shares a local model, a prompt streams back with a runtime-backed receipt, and the credit ledger balances. Plus how we used Gemini API, Tiger Data and Sentry, and what it saves.</p>
+
+  <div class="video">
+    <iframe width="560" height="315" src="https://www.youtube.com/embed/pevKYZLvLoE?si=tW2p6b92ocfaotyJ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+  </div>
+
+  <div class="cta">
+    <a class="primary" href="https://github.com/roshaninfordham/opencomputemesh">View the code on GitHub</a>
+    <a href="https://github.com/roshaninfordham/opencomputemesh#quick-start">Quick start</a>
+    <a href="https://github.com/roshaninfordham/opencomputemesh/blob/main/docs/DEMO_RUNBOOK.md">Demo runbook</a>
+  </div>
+
+  <h2>Built with our sponsors</h2>
+  <div class="sponsors">
+    <div class="card"><h3>Gemini API</h3><p>A runtime adapter any node can share, behind the same interface as local Ollama. Gemini's usage metadata becomes the token counts on every receipt.</p></div>
+    <div class="card"><h3>Tiger Data</h3><p>Every finished job lands in a TimescaleDB hypertable. A continuous aggregate drives the live throughput chart.</p></div>
+    <div class="card"><h3>Sentry</h3><p>Opt-in monitoring for the coordinator, with scrubbers that strip prompts, outputs and secrets before anything is sent.</p></div>
+  </div>
+
+  <h2>How it fits together</h2>
+  <img class="arch" src="images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator; node agents dial out and run models through pluggable runtime adapters">
+
+  <footer>Open source under Apache-2.0, and for everyone. And that's OpenComputeMesh.</footer>
+</main>
+</body>
+</html>
