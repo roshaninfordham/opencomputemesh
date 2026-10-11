@@ -11,11 +11,52 @@
 
 # OpenComputeMesh
 
-<p align="center"><a href="https://www.youtube.com/watch?v=pevKYZLvLoE"><img src="docs/images/demo-preview.gif" alt="OpenComputeMesh demo preview: a prompt streams from a node, the receipt, the sponsor stack and what it saves. Click to watch the full 2-minute video." width="80%"></a><br><a href="https://www.youtube.com/watch?v=pevKYZLvLoE"><b>▶ Watch the 2-minute demo on YouTube</b></a>: real captures of the running software, how we used Gemini API, Tiger Data and Sentry, and what it saves.</p>
+<p align="center"><a href="https://www.youtube.com/watch?v=pevKYZLvLoE"><img src="docs/images/demo-preview.gif" alt="OpenComputeMesh demo preview: a prompt streams from a node, the receipt, the sponsor stack and what it saves. Click to watch the full 2-minute video." width="80%"></a><br><a href="https://www.youtube.com/watch?v=pevKYZLvLoE"><b>▶ Watch the 2-minute demo on YouTube</b></a>: real captures of the running software, how we used Gemini API, Tiger Data and Sentry, and what it saves.<br><a href="https://opencomputemesh.vercel.app"><b>▶ Watch the demo with the embedded player: https://opencomputemesh.vercel.app</b></a></p>
 
-OpenComputeMesh v0.1 lets a small group pool the language models they already run locally with [Ollama](https://ollama.com). One person runs a coordinator. Others join it in a browser, and anyone who wants to contribute compute runs a small node agent next to their own Ollama. A prompt sent from the web app (or the OpenAI-compatible API) is routed to one online worker that has the exact model. The tokens stream back, and each request gets a receipt that shows runtime-reported token counts, timings, and the OpenCompute Credits (OCC) moved between requester and provider.
+OpenComputeMesh v0.1 lets a small group pool the language models they already run locally with [Ollama](https://ollama.com). One person runs a coordinator. Others join it in a browser, and anyone who wants to contribute compute runs a small node agent next to their own Ollama (or, opted in, in front of the Gemini API). A prompt sent from the web app (or the OpenAI-compatible API) is routed to one online worker that has the exact model. The tokens stream back, and each request gets a receipt that shows runtime-reported token counts, timings, and the OpenCompute Credits (OCC) moved between requester and provider.
 
-Opening the coordinator URL does not share anyone's compute. A browser that joins can only send requests. Compute is shared only when someone runs the node agent on a machine that has Ollama running and at least one model already pulled, and approves which of those models to share. The agent connects out to the coordinator over a WebSocket. It opens no inbound ports and talks to Ollama on loopback only.
+Opening the coordinator URL does not share anyone's compute. A browser that joins can only send requests. Compute is shared only when someone runs the node agent next to a runtime that has at least one model (for Ollama, a model already pulled), and approves which of those models to share. The agent connects out to the coordinator over a WebSocket and opens no inbound ports. With the default Ollama runtime it talks to Ollama on loopback only.
+
+Built for AI Engineer NYC 2026 (MLH). Sponsor tracks entered: Best Overall, Best Use of Gemini API, Best Use of Tiger Data, Best Use of Sentry. Details: [Sponsor technologies](#sponsor-technologies), the deep dive in [docs/SPONSORS.md](docs/SPONSORS.md), and the [judging criteria map](#judging-criteria-map).
+
+## Sponsor technologies
+
+All three integrations are optional and off by default. With none of them enabled the coordinator, agents and tests behave exactly as before. Status is stated as it is, not as it might be.
+
+| Sponsor | Status |
+|---|---|
+| Gemini API | Built. Unit-tested against the documented REST/SSE format with a mocked transport (`tests/test_gemini.py`, 12 tests). **Not run live**: no API key was available. |
+| Tiger Data (TimescaleDB) | Built. **Verified live** against a real local TimescaleDB 2.30.2 on PostgreSQL 17 (Docker image `timescale/timescaledb:latest-pg17`), through the real coordinator (`tests/test_timeseries.py`, 4 tests). Not yet run against a hosted Tiger Cloud service. |
+| Sentry | Built. Scrubbers unit-tested, and the full path tested through the real `sentry-sdk` with an in-memory transport (`tests/test_observability.py`, 5 tests). **Not delivered to a live Sentry project**: no DSN was available. |
+
+### Gemini API: a cloud runtime behind the same adapter as Ollama
+
+- **What it does.** A node owner can run `ocm-agent --runtime gemini` and share Gemini models with the group. The coordinator routes, meters and settles those jobs exactly like Ollama jobs. Receipts carry Gemini's own `usageMetadata` token counts.
+- **Why it fits.** The coordinator only sees normalized shapes from the `RuntimeAdapter` protocol in `ocm/runtime.py`. Gemini is a second implementation of that protocol, so no routing, ledger or wire-protocol code changed. It lets a member with no local GPU contribute capacity.
+- **How it works.** `GeminiAdapter` calls `POST /v1beta/models/{model}:streamGenerateContent?alt=sse`, decodes server-sent events (`SSEDecoder`), streams text parts (skipping `thought` parts), and maps `usageMetadata.promptTokenCount` / `candidatesTokenCount` to the receipt's input and output tokens. `finishReason` `STOP` becomes `stop`, `MAX_TOKENS` becomes `length`, anything else is lowercased (for example `safety`). That value is stored as `done_reason`, and `/v1/chat/completions` reports `finish_reason: "length"` for `length` and `"stop"` otherwise. Gemini reports no durations, so runtime timings and tokens per second stay empty rather than estimated. `thoughtsTokenCount` is sent as `thoughts_count` in `final_stats`, kept out of the output count, and not currently stored or charged by the coordinator.
+- **Key handling.** The key comes from `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), is removed from the agent's environment once read, and travels only in the `x-goog-api-key` header: never in a URL, log line or coordinator frame (`tests/test_gemini.py` asserts all three).
+- **Files.** `ocm/runtime.py` (`SSEDecoder`, `gemini_body`, `gemini_final_stats`, `GeminiAdapter`), `ocm/agent.py` (`--runtime`, `OCM_RUNTIME`), `tests/test_gemini.py`.
+- **Enable.** No extra dependency (uses `httpx`). `GEMINI_API_KEY=... uv run ocm-agent --runtime gemini --models gemini-2.5-flash --coordinator http://127.0.0.1:8000`. The model ID must match one the API lists for your key (with the `models/` prefix removed); `gemini-2.5-flash` is the ID used in the tests, not one verified live.
+- **Trade-off.** A Gemini node sends the prompts routed to it to Google. The agent prints this at startup. The Rust agent supports Ollama only.
+
+### Tiger Data: job metrics as a TimescaleDB hypertable
+
+- **What it does.** When `OCM_TIMESCALE_URL` is set, every terminal job (completed, failed, cancelled, expired) is copied as one metrics row into the hypertable `ocm_job_metrics`. A continuous aggregate `ocm_job_metrics_1m` rolls it up per minute and model. `GET /api/v1/network/throughput` reads the aggregate, and the web Overview page draws it as the "Throughput (last hour)" panel.
+- **Why it fits.** Job metrics are append-only, time-stamped and queried by time window: the workload hypertables, continuous aggregates and compression are built for. SQLite stays the source of truth for jobs and the ledger; TimescaleDB holds a derived copy for time-series queries.
+- **How it works.** `ocm/timeseries.py` creates the schema idempotently under a Postgres advisory lock (safe when two coordinators start at once): a 1-day-chunk hypertable, compression segmented by `model_id` with a 7-day compression policy, and a 1-minute continuous aggregate with `materialized_only = false` (real-time aggregation, so fresh rows show before the next refresh) and a refresh policy every minute. The job path never waits on Postgres: `record()` appends to a bounded in-memory buffer (10,000 rows) and a background writer inserts in batches of 500, with `ON CONFLICT DO NOTHING` so retries are idempotent and exponential backoff up to 30 s on failure. Only metric columns are written; there is no column that can hold a prompt or output.
+- **Files.** `ocm/timeseries.py`, `ocm/config.py` (`timescale_url`), `ocm/hub.py` (`Sink.record` on every terminal job), `ocm/app.py` (`/api/v1/network/throughput`), `web/src/pages.tsx` and `web/src/components.tsx` (`ThroughputChart`), `tests/test_timeseries.py`.
+- **Enable.** `uv sync --extra tiger` (installs `psycopg[binary]`), then `OCM_TIMESCALE_URL=postgresql://user:pass@host:port/db uv run ocm serve`. The database must already have the `timescaledb` extension (Tiger Cloud services and the TimescaleDB Docker image do). See the [runbook](docs/DEMO_RUNBOOK.md#optional-sponsor-integrations).
+- **Verified.** `tests/test_timeseries.py` runs against a real TimescaleDB (default `postgresql://postgres:ocmlocal@127.0.0.1:55432/ocm`, override with `OCM_TEST_TIMESCALE_URL`) and checks: the schema is idempotent; completed and failed jobs land in the hypertable with exact runtime-reported values; the continuous aggregate returns them before any refresh; the endpoint returns them; a Postgres that accepts TCP but never answers neither fails nor delays a job, and the endpoint answers `503 TIMESERIES_UNAVAILABLE` instead of inventing data.
+
+### Sentry: opt-in error monitoring that cannot leak prompts
+
+- **What it does.** When `SENTRY_DSN` is set, `ocm serve` initializes the Sentry SDK with the FastAPI and Starlette integrations, so unhandled coordinator errors are reported with release `opencomputemesh@<version>` and environment `OCM_ENV`.
+- **Why it fits.** The coordinator handles prompts, join codes, session cookies, API keys, enrollment tokens and node credentials. Error monitoring is only acceptable if none of those can leave the machine, so the integration is built around scrubbing.
+- **How it works.** `init_sentry()` sets `send_default_pii=False`, `include_local_variables=False`, `max_request_body_size="never"` and `traces_sample_rate` from `SENTRY_TRACES_SAMPLE_RATE` (default 0, so no performance traces). `before_send`, `before_send_transaction` and `before_breadcrumb` run pure scrubbers that drop request bodies, cookies, query strings and stack-frame variables; redact `Authorization`, `Cookie`, `Set-Cookie` and `X-Api-Key` headers; strip query strings from URLs; replace `/join/<code>` with `/join/[redacted]`; and redact `ocm_`/`ocme_`/`ocmn_` tokens and any run of 32 or more token characters.
+- **Files.** `ocm/observability.py`, `ocm/cli.py` (called only for `ocm serve`), `tests/test_observability.py`.
+- **Enable.** `uv sync --extra sentry` (installs `sentry-sdk`), then `SENTRY_DSN=https://...ingest.sentry.io/... uv run ocm serve`. To enable Tiger Data and Sentry together use `uv sync --extra tiger --extra sentry`; `uv sync` removes extras that are not named.
+- **Verified.** Unit tests feed events, transactions and breadcrumbs holding a prompt, a join code, a session cookie, a WebSocket ticket, an API key, an enrollment token, a node credential and a long secret, and assert none survive. `test_end_to_end_real_sdk` initializes the real SDK with an in-memory transport, captures an exception and a message, and asserts the same on the serialized envelopes.
+- **Trade-off.** The 32-character rule also redacts UUIDs, so job and node IDs appear as `[redacted]` in Sentry events.
 
 ## What it looks like
 
@@ -48,9 +89,11 @@ Snowflake and Nimble are not integrated.
 | Part | Code | What it does |
 |---|---|---|
 | Coordinator | `ocm/app.py`, `ocm/hub.py`, `ocm/ledger.py`, `ocm/db.py`, `ocm/config.py`, `ocm/cli.py` | FastAPI app (one process). Serves REST, WebSockets, the OpenAI-compatible subset and the built web app. Stores everything durable in SQLite (WAL mode). |
-| Node agent | `ocm/agent.py`, `ocm/runtime.py` (CLI `ocm-agent`) | Outbound-only WebSocket client. Enrolls with a one-time token, then runs jobs against local Ollama and streams tokens back. |
-| Web app | `web/` (React + Vite) | Built to `web/dist` and served by the coordinator from the same origin. Join, run a model, view receipts, nodes, usage and the ledger. |
-| Rust agent (alternative) | `crates/ocm-node` | A Rust node agent, binary `ocm-node`, with the same flags, environment variables and `<state-dir>/node.json` state file as `ocm-agent`. Build with `cargo build --release --manifest-path crates/ocm-node/Cargo.toml`. Covered by its own `cargo test` suite and verified end to end against the coordinator. |
+| Node agent | `ocm/agent.py`, `ocm/runtime.py` (CLI `ocm-agent`) | Outbound-only WebSocket client. Enrolls with a one-time token, then runs jobs against local Ollama (default) or the Gemini API (`--runtime gemini`) and streams tokens back. |
+| Metrics sink (optional) | `ocm/timeseries.py` | Copies terminal-job metrics to Tiger Data / TimescaleDB when `OCM_TIMESCALE_URL` is set. |
+| Error monitoring (optional) | `ocm/observability.py` | Sentry with privacy scrubbers when `SENTRY_DSN` is set. |
+| Web app | `web/` (React + Vite) | Built to `web/dist` and served by the coordinator from the same origin. Join, run a model, view receipts, nodes, usage, the ledger and (when enabled) the throughput chart. |
+| Rust agent (alternative) | `crates/ocm-node` | A Rust node agent, binary `ocm-node`, with the same Ollama flags, environment variables and `<state-dir>/node.json` state file as `ocm-agent`. It supports the Ollama runtime only (no `--runtime`). It pins the rustls `ring` crypto provider at startup, which fixed a panic on the first `wss://` handshake. Build with `cargo build --release --manifest-path crates/ocm-node/Cargo.toml`. Covered by its own `cargo test` suite (9 tests) and verified end to end against the coordinator, including over a public `wss://` tunnel. |
 
 ## Quick start
 
@@ -87,7 +130,18 @@ uv run ocm-agent --coordinator http://127.0.0.1:8000 --models qwen2.5:1.5b --nam
 
 The agent asks for the token with a hidden prompt. For non-interactive runs set `OCM_ENROLLMENT_TOKEN` in the environment instead. After enrollment the agent saves a node credential to `~/.opencomputemesh/node.json` (mode 0600). Later runs reuse it and need no token. Use `--state-dir DIR` to keep a separate credential per node, for example when simulating two nodes on one machine.
 
-Other agent flags: `--ollama` (default `http://127.0.0.1:11434`, loopback only), `--max-jobs` (default 1), `--heartbeat` (seconds, default 20). `--coordinator` can also come from `OCM_COORDINATOR` or from the saved state.
+Other agent flags: `--runtime` (`ollama` or `gemini`, default from `OCM_RUNTIME`, else `ollama`), `--ollama` (default `http://127.0.0.1:11434`, loopback only), `--max-jobs` (default 1), `--heartbeat` (seconds, default 20). `--coordinator` can also come from `OCM_COORDINATOR` or from the saved state.
+
+Optional sponsor integrations (each is independent; see [Sponsor technologies](#sponsor-technologies)):
+
+```bash
+uv sync --extra tiger --extra sentry          # psycopg and sentry-sdk
+OCM_TIMESCALE_URL=postgresql://postgres:ocmlocal@127.0.0.1:55432/ocm \
+SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project> \
+  uv run ocm serve                            # coordinator with Tiger Data metrics and Sentry
+GEMINI_API_KEY=<key> uv run ocm-agent --runtime gemini --models gemini-2.5-flash \
+  --coordinator http://127.0.0.1:8000 --name gemini-node --state-dir ~/.ocm-gemini
+```
 
 To let people on other networks join, publish the coordinator through a tunnel. See [docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md) and `scripts/demo_tunnel.sh`.
 
@@ -99,16 +153,21 @@ For frontend work, `scripts/dev.sh` runs the coordinator on port 8000 and the Vi
 
 ```mermaid
 flowchart LR
-  B[Browser<br/>web app] -- "HTTPS REST + /ws/client" --> C[Coordinator<br/>FastAPI, one process]
-  K[API client] -- "/v1/chat/completions<br/>Bearer API key" --> C
-  C --- D[(SQLite WAL<br/>members, nodes, jobs,<br/>job_events, ledger)]
-  A1[Node agent] -- "outbound wss /ws/node" --> C
-  A2[Node agent] -- "outbound wss /ws/node" --> C
-  A1 -- "http://127.0.0.1:11434" --> O1[Ollama]
-  A2 -- "http://127.0.0.1:11434" --> O2[Ollama]
+  B[Browser web app<br/>phone or laptop] -->|HTTPS + /ws/client| C
+  API[API client] -->|/v1/chat/completions| C
+  C[Coordinator<br/>FastAPI, one process] --> DB[(SQLite WAL<br/>jobs + append-only ledger)]
+  C -->|every finished job| TS[(Tiger Data / TimescaleDB<br/>hypertable ocm_job_metrics)]
+  TS --> CA[continuous aggregate<br/>ocm_job_metrics_1m] --> CH[/api/v1/network/throughput<br/>live chart in the app/]
+  C -->|errors, after scrubbing<br/>prompts and secrets| SE[Sentry]
+  PA[Python node agent<br/>ocm-agent] -->|outbound wss /ws/node| C
+  RA[Rust node agent<br/>ocm-node] -->|outbound wss /ws/node| C
+  PA --> AD{{RuntimeAdapter}}
+  RA --> OL
+  AD -->|127.0.0.1 only| OL[Ollama<br/>local models]
+  AD -->|streamGenerateContent<br/>key stays on node| GE[Gemini API]
 ```
 
-The database is the source of truth for durable state. Live sockets, in-flight token streams and prompts exist only in the coordinator's memory, so exactly one coordinator process must run (uvicorn is started with a single worker). The job state machine, wire messages, scheduling, and retry, timeout and cancel rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+The database is the source of truth for durable state. TimescaleDB, when enabled, holds a derived copy of job metrics only. Live sockets, in-flight token streams and prompts exist only in the coordinator's memory, so exactly one coordinator process must run (uvicorn is started with a single worker). The job state machine, wire messages, scheduling, and retry, timeout and cancel rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## How metrics are defined
 
@@ -121,6 +180,8 @@ Token counts come from Ollama's final stream chunk: `prompt_eval_count` (input) 
 - `unavailable`: neither was present.
 
 Only `runtime_reported` jobs are charged (see accounting below). The input estimate used for the credit hold is never shown as a token count.
+
+For Gemini nodes the adapter maps `usageMetadata.promptTokenCount` to `prompt_eval_count` and `candidatesTokenCount` to `eval_count`, so the same rules apply. Gemini reports no durations: `runtime_total`, `runtime_load`, `prompt_eval`, `generation` and tokens per second stay `null`, while `worker_elapsed` and `time_to_first_token` are still measured. Thinking tokens (`thoughtsTokenCount`) are not added to the output count and are not charged.
 
 Ollama reports durations in nanoseconds. `ocm/metrics.py` converts them to milliseconds with `round(ns / 1_000_000)`:
 
@@ -156,7 +217,9 @@ OpenCompute Credits (OCC) are non-cash demo accounting units. All amounts are st
 
 ## Security model
 
-- **Loopback-only runtime.** `ocm-agent` refuses an `--ollama` URL whose host is not `127.0.0.1`, `localhost` or `[::1]`. The agent opens no listening sockets. It connects out to `/ws/node` (`wss://` when the coordinator URL is `https://`).
+- **Loopback-only runtime.** `ocm-agent` and `ocm-node` refuse an `--ollama` URL whose host is not `127.0.0.1`, `localhost` or `[::1]`. The URL is parsed (`httpx.URL` in Python), not string-matched, so `http://127.0.0.1@evil.com` is rejected, and the Ollama client ignores `HTTP(S)_PROXY` (`trust_env=False`). The agent opens no listening sockets.
+- **Cloud runtime is explicit.** `--runtime gemini` is the one deliberate exception to loopback-only: prompts routed to that node go to Google's Gemini API, and the agent says so at startup. The API key is read from `GEMINI_API_KEY` or `GOOGLE_API_KEY`, removed from the process environment, and sent only in the `x-goog-api-key` header.
+- **Optional telemetry.** The TimescaleDB sink writes metric columns only (no prompt or output column exists) and never logs its URL. Sentry is off without `SENTRY_DSN` and scrubs every event, transaction and breadcrumb before sending (see [Sentry](#sentry-opt-in-error-monitoring-that-cannot-leak-prompts)). It connects out to `/ws/node` (`wss://` when the coordinator URL is `https://`).
 - **Explicit model approval.** A node shares only the installed models named with `--models` (or chosen at the interactive prompt). Jobs for any other model are refused with `MODEL_NOT_SHARED`. The agent never pulls models.
 - **Enrollment tokens.** Tokens are created per member from the web app. They are single-use (claimed with a conditional `UPDATE ... WHERE used_at IS NULL`), expire after `OCM_ENROLLMENT_TOKEN_TTL_SECONDS` (default 600), and are limited to 5 per member per 10 minutes. The agent reads them from a hidden prompt or `OCM_ENROLLMENT_TOKEN`, never from a command-line argument.
 - **Hashed credentials.** The database stores only SHA-256 hashes of the join code, session tokens, API keys, enrollment tokens and node credentials. Sessions, API keys and enrollment tokens are looked up by hash. The join code, node credentials and the admin token are compared with `hmac.compare_digest`. A revoked node's credential hash is overwritten, and its socket is closed with code 4003.
@@ -201,6 +264,7 @@ Session and network (cookie auth unless noted):
 | POST | `/api/v1/session/leave` | Ends the session |
 | POST | `/api/v1/session/api-key` | Creates or replaces the member's API key (shown once) |
 | GET | `/api/v1/network` | Network snapshot. Without a session, only counts and model names. |
+| GET | `/api/v1/network/throughput?minutes=` | Per-minute, per-model job counts, token sums, average and p95 TTFT and end-to-end latency, and average tokens per second from the TimescaleDB continuous aggregate. `minutes` 1 to 1440, default 60. Returns `{"enabled": false}` when `OCM_TIMESCALE_URL` is unset, and `503 TIMESERIES_UNAVAILABLE` when it is set but unreachable. Includes `buffered_rows` and `dropped_rows`. |
 | GET | `/api/v1/network/join-info` | Join code and path |
 | POST | `/api/v1/ws-ticket` | 60-second single-use ticket for `/ws/client` |
 
@@ -319,19 +383,47 @@ Every field of `Settings` in `ocm/config.py` can be set with an environment vari
 | `OCM_MIN_JOB_CHARGE_MICRO_OCC` | `0` | Minimum charge per settled job |
 | `OCM_ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Extra origins accepted besides the request host |
 | `OCM_WEB_DIST` | `./web/dist` | Built web app directory |
+| `OCM_TIMESCALE_URL` | empty | Optional Tiger Data / TimescaleDB connection URL for the job-metrics sink. Empty disables it. Needs `uv sync --extra tiger`. |
 
-Agent-side variables: `OCM_COORDINATOR`, `OCM_ENROLLMENT_TOKEN`, `OCM_AGENT_STATE_DIR`, `OLLAMA_BASE_URL`, `OCM_NODE_HEARTBEAT_INTERVAL_SECONDS`.
+Coordinator variables outside `Settings` (read by `init_sentry()` in `ocm/observability.py`, only under `ocm serve`; need `uv sync --extra sentry`):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SENTRY_DSN` | empty | Enables Sentry error monitoring. Empty disables it. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0` | Fraction of requests sent as performance traces. `0` sends none. |
+
+Agent-side variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OCM_COORDINATOR` | saved state | Coordinator URL (`--coordinator`) |
+| `OCM_ENROLLMENT_TOKEN` | empty | One-time enrollment token for non-interactive runs |
+| `OCM_AGENT_STATE_DIR` | `~/.opencomputemesh` | Where `node.json` is kept (`--state-dir`) |
+| `OCM_RUNTIME` | `ollama` | `ollama` or `gemini` (`--runtime`). Python agent only. |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama URL (`--ollama`); must be loopback |
+| `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | empty | Required with `--runtime gemini`. Removed from the environment once read; sent only in the `x-goog-api-key` header. |
+| `OCM_NODE_HEARTBEAT_INTERVAL_SECONDS` | `20` | Default `--heartbeat` |
 
 ## Testing
 
 ```bash
-uv run pytest -q
+uv run pytest -q                                              # Python: coordinator, agents, sponsor integrations
+cargo test --manifest-path crates/ocm-node/Cargo.toml         # Rust agent
 ```
 
-- `tests/test_units.py`: NDJSON decoding, metric normalization, tariff rounding, ledger reserve, settle, release and reversal, append-only triggers, and the state machine.
-- `tests/test_integration.py`: a real coordinator with fake WebSocket nodes. Covers routing, streaming and settlement, idempotent replay, worker errors, retry on another worker after a disconnect, timeout and cancel, insufficient credits, pause and authorization, and rejection of reports on foreign jobs.
-- `tests/test_agent.py`: Python node agent units: loopback-only Ollama URL parsing, enrollment-token reuse after a failed attempt, and proxy settings ignored for runtime traffic.
-- `tests/test_real_ollama.py`: streams from a local Ollama and checks the runtime counters. It is skipped (not passed) if Ollama is unreachable or the model (`OCM_SMOKE_MODEL`, default `qwen2.5:1.5b`) is not installed.
+Current counts (run on 2026-10-11 on the development Mac, with the `tiger` and `sentry` extras installed, Ollama 0.17.7 with `qwen2.5:1.5b`, and TimescaleDB 2.30.2 on `127.0.0.1:55432`): **67 passed, 0 skipped** in Python and **9 passed** in Rust.
+
+| File | Tests | Covers |
+|---|---|---|
+| `tests/test_units.py` | 14 | NDJSON decoding, metric normalization, tariff rounding, ledger reserve, settle, release and reversal, append-only triggers, the state machine |
+| `tests/test_integration.py` | 15 | A real coordinator with fake WebSocket nodes: routing, streaming and settlement, idempotent replay, worker errors, retry on another worker after a disconnect, timeout and cancel, insufficient credits, pause and authorization, rejection of reports on foreign jobs |
+| `tests/test_agent.py` | 16 | Python node agent: loopback-only Ollama URL parsing (including userinfo tricks), enrollment-token reuse after a failed attempt, proxy settings ignored for runtime traffic |
+| `tests/test_gemini.py` | 12 | Gemini adapter with a mocked transport: message conversion, SSE split mid-line, tokens, usage and thinking tokens, finish-reason mapping, API errors without the prompt, missing finish reason, cancellation, model listing, key only in the header, `--runtime gemini` requiring a key and announcing the cloud runtime |
+| `tests/test_timeseries.py` | 4 | Tiger Data sink against a real TimescaleDB: idempotent schema, hypertable rows, continuous aggregate with real-time aggregation, throughput endpoint, outage that neither fails nor delays jobs, disabled endpoint |
+| `tests/test_observability.py` | 5 | Sentry scrubbers on events, breadcrumbs and transactions, no-op without a DSN, end to end through the real SDK with an in-memory transport |
+| `tests/test_real_ollama.py` | 1 | Streams from a local Ollama and checks the runtime counters |
+
+Some tests skip themselves rather than pass when their dependency is missing: `test_timeseries.py` (no `psycopg` or no reachable TimescaleDB with the extension; set `OCM_TEST_TIMESCALE_URL`), the real-SDK Sentry test (no `sentry-sdk`), and `test_real_ollama.py` (no Ollama or no `OCM_SMOKE_MODEL`, default `qwen2.5:1.5b`). CI (`.github/workflows/ci.yml`) runs `uv sync --locked` without extras and has no Ollama or TimescaleDB, so those tests skip there. The live TimescaleDB verification was done locally.
 
 `scripts/demo_preflight.sh` runs the checks a demo host needs (see the runbook).
 
@@ -342,7 +434,9 @@ What has been verified by hand:
   - The `Secure` cookie was set via `X-Forwarded-Proto`.
   - Cross-origin POSTs were rejected.
   - Browser WebSocket streaming worked.
-  - Agent enrollment over `wss://` worked.
+  - Agent enrollment over `wss://` worked, including the Rust agent after the rustls provider fix.
+
+Not verified live: a Gemini node against the real Gemini API (no API key) and Sentry delivery to a real project (no DSN).
 
 Known runtime quirk: with Ollama 0.17.7, `qwen3:4b` ignores `think: false` and emits its reasoning text in normal content. Use `qwen2.5:1.5b` for demos.
 
@@ -350,14 +444,16 @@ Known runtime quirk: with Ollama 0.17.7, `qwen3:4b` ignores `think: false` and e
 
 - **Single trust boundary.** There is one coordinator process and one SQLite file. Whoever runs the coordinator controls membership, routing and the ledger. There is no replication, no federation and no horizontal scaling. Rate limits and WebSocket tickets are in-process.
 - **A URL alone shares no compute.** Joining in a browser only lets you send requests. Capacity exists only while someone runs the node agent with Ollama and approved models.
-- **Ollama is the only runtime.** The adapter interface exists, but only the Ollama adapter is implemented.
+- **Two runtimes.** Ollama (loopback) and the Gemini API are implemented behind `RuntimeAdapter`. The Gemini adapter has not been run against the live API. A Gemini node sends prompts to Google, and the Rust agent supports Ollama only. llama.cpp, vLLM and MLX are not implemented.
 - **One worker per request.** Each request runs entirely on one node. There is no model sharding, tensor or pipeline parallelism, or splitting a request across machines.
 - **No per-job GPU or CPU telemetry.** The system records worker wall time and runtime-reported durations and tokens, not per-job CPU or GPU active time. Usage reports show these as `null`.
-- **Token counts depend on the runtime.** They are whatever Ollama reports, with their provenance recorded. Different runtimes or model templates count differently. Jobs without both counts are not charged.
+- **Token counts depend on the runtime.** They are whatever Ollama or Gemini reports, with their provenance recorded. Different runtimes or model templates count differently. Jobs without both counts are not charged.
 - **OCC is not money.** Credits are non-cash demo accounting units. They cannot be redeemed, transferred out or exchanged, and the default tariff is demo policy, not a market price.
 - **The hosted API equivalent is hypothetical.** It is shown only after an admin has added a sourced, dated price with `POST /api/v1/admin/pricing`. It is an illustrative comparison, not a quote or a saving.
 - **Benchmarks are single runs.** A comparison runs one prompt once on your node and once on another node. It is offered only when both serve the same model digest. The result is illustrative and not statistically valid.
-- **Node owners can see prompts.** A prompt is processed in plain text by the Ollama instance on the node that serves it. The owner of that machine can observe it. Don't send anything you would not show the node owners.
+- **Node owners can see prompts.** A prompt is processed in plain text by the runtime on the node that serves it. The owner of that machine can observe it, and on a Gemini node it is also sent to Google. Don't send anything you would not show the node owners.
+- **Time-series metrics are best effort.** The TimescaleDB copy is buffered in memory (10,000 rows). A long outage drops the oldest rows, and a coordinator restart loses what is buffered. SQLite remains authoritative. Verified on a local TimescaleDB 2.30.2, not on Tiger Cloud.
+- **Sentry is unverified against a live project** and redacts UUIDs (job and node IDs) along with secrets. Gemini thinking tokens are reported by the agent but not stored or charged.
 - **Quick Tunnels are temporary.** Cloudflare Quick Tunnel URLs are random, change on every restart, and are meant for demos, not production. When the URL changes, restart agents with the new `--coordinator`; they reuse their saved credential.
 
 ## License
