@@ -31,11 +31,11 @@ sequenceDiagram
   R->>C: prompt for gemini-2.5-flash
   C->>C: reserve credits, pick an eligible node
   C->>A: job.start (messages, max_tokens, temperature, top_p)
-  A->>A: gemini_body(): system -> systemInstruction, assistant -> model
+  A->>A: gemini_body(): system to systemInstruction, assistant to model
   A->>G: POST /v1beta/models/{model}:streamGenerateContent?alt=sse<br/>header x-goog-api-key
   loop server-sent events
     G-->>A: data: {candidates[].content.parts[], usageMetadata}
-    A->>A: SSEDecoder; skip parts with thought=true
+    A->>A: SSEDecoder, skip parts with thought=true
     A->>C: job.token (text, seq)
     C-->>R: request.token
   end
