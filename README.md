@@ -11,7 +11,7 @@
 
 # OpenComputeMesh
 
-<p align="center"><a href="https://www.youtube.com/watch?v=pevKYZLvLoE"><img src="https://img.youtube.com/vi/pevKYZLvLoE/maxresdefault.jpg" alt="Watch the 2-minute OpenComputeMesh demo" width="80%"></a><br><a href="https://www.youtube.com/watch?v=pevKYZLvLoE"><b>Watch the 2-minute demo</b></a>: real captures of the running software, how we used Gemini API, Tiger Data and Sentry, and what it saves.</p>
+<p align="center"><a href="https://www.youtube.com/watch?v=pevKYZLvLoE"><img src="docs/images/demo-preview.gif" alt="OpenComputeMesh demo preview: a prompt streams from a node, the receipt, the sponsor stack and what it saves. Click to watch the full 2-minute video." width="80%"></a><br><a href="https://www.youtube.com/watch?v=pevKYZLvLoE"><b>Watch the 2-minute demo</b></a>: real captures of the running software, how we used Gemini API, Tiger Data and Sentry, and what it saves.</p>
 
 OpenComputeMesh v0.1 lets a small group pool the language models they already run locally with [Ollama](https://ollama.com). One person runs a coordinator. Others join it in a browser, and anyone who wants to contribute compute runs a small node agent next to their own Ollama. A prompt sent from the web app (or the OpenAI-compatible API) is routed to one online worker that has the exact model. The tokens stream back, and each request gets a receipt that shows runtime-reported token counts, timings, and the OpenCompute Credits (OCC) moved between requester and provider.
 
