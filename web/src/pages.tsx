@@ -13,6 +13,16 @@ function useFetch<T>(path: string | null, deps: unknown[] = []) {
   return { data, error, reload: load };
 }
 
+/** Re-renders every `interval` ms (null = paused) so time-derived text stays current. */
+function useTick(interval: number | null) {
+  const [, setT] = useState(0);
+  useEffect(() => {
+    if (interval === null) return;
+    const id = setInterval(() => setT((t) => t + 1), interval);
+    return () => clearInterval(id);
+  }, [interval]);
+}
+
 /* ---------------- Join ---------------- */
 
 export function JoinPage({ code, onJoined }: { code: string; onJoined: (m: Member) => void }) {
@@ -152,11 +162,11 @@ export function entryLabel(t: string) {
 /* ---------------- Run ---------------- */
 
 type Run = { ref: string; requestId?: string; phase: "sending" | "queued" | "routed" | "running" | "done" | "failed" | "cancelled";
-  model: string; nodeName?: string; reason?: string; output: string; receipt?: Receipt; error?: string; t0: number; tFirst?: number; tDone?: number };
+  model: string; nodeName?: string; reason?: string; output: string; chunks: number; receipt?: Receipt; error?: string; t0: number; tFirst?: number; tDone?: number };
 
 const CONSENT_KEY = "ocm-consent-v1";
 
-export function RunPage({ member, initialModel }: { member: Member; initialModel?: string }) {
+export function RunPage({ member, initialModel, go }: { member: Member; initialModel?: string; go: Go }) {
   const { network, send, subscribe, connected } = useMesh();
   const models = network?.models ?? [];
   const [model, setModel] = useState(initialModel ?? "");
@@ -189,12 +199,13 @@ export function RunPage({ member, initialModel }: { member: Member; initialModel
   const start = () => {
     if (!consent) return;
     const ref = crypto.randomUUID();
-    const r: Run = { ref, phase: "sending", model, output: "", t0: performance.now() };
+    const r: Run = { ref, phase: "sending", model, output: "", chunks: 0, t0: performance.now() };
     setRun(r); setBench(null);
     if (!send({ type: "request.start", idempotency_key: ref, ...params(), ...(target ? { node_id: target } : {}) }))
       setRun({ ...r, phase: "failed", error: "Not connected to the coordinator. Reconnecting…" });
   };
   const busy = run && ["sending", "queued", "routed", "running"].includes(run.phase);
+  useTick(busy ? 100 : null);
   const workers = (network?.nodes ?? []).filter((n) => n.status === "ONLINE" && n.models.some((x) => x.model_id === model));
 
   return (
@@ -237,9 +248,16 @@ export function RunPage({ member, initialModel }: { member: Member; initialModel
                 <Button type="button" variant="quiet" className="mt-2" onClick={() => { localStorage.setItem(CONSENT_KEY, "yes"); setConsent(true); }}>I understand</Button>
               </div>
             ) : null}
+            {!models.length && network && (
+              <div className="rounded-md border border-line bg-paper p-3 text-sm">
+                <p>No models are online right now, so there is nothing to run. Anyone in the network can share a model from their own computer.</p>
+                <button type="button" className="mt-1 font-medium text-mesh underline" onClick={() => go("/nodes?share=1")}>Go to Nodes, Share my compute</button>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-3">
               <Button disabled={!consent || !model || !prompt.trim() || !!busy || !connected || !models.length}>{busy ? "Running…" : "Run"}</Button>
               {busy && run?.requestId && <Button type="button" variant="quiet" onClick={() => send({ type: "request.cancel", request_id: run.requestId })}>Cancel</Button>}
+              {!connected && <span className="flex items-center gap-1.5 text-sm text-warn"><span aria-hidden className="h-1.5 w-1.5 rounded-full bg-warn" />Reconnecting to the coordinator…</span>}
               <span className="text-xs text-muted">Balance {occ(member.balance_micro_occ)} OCC. A worst-case hold is placed, then you pay only for measured tokens.</span>
             </div>
           </form>
@@ -248,14 +266,22 @@ export function RunPage({ member, initialModel }: { member: Member; initialModel
           {!run ? <Empty>Output streams here token by token as the worker generates it.</Empty> : (
             <div className="space-y-5">
               {run.error && <ErrorNote>{run.error}</ErrorNote>}
+              {busy && (
+                <p className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
+                  <span>Elapsed <span className="font-medium text-ink">{ms(Math.round(Math.max(0, performance.now() - run.t0)))}</span></span>
+                  <span><span className="font-medium text-ink">{run.chunks}</span> {run.chunks === 1 ? "chunk" : "chunks"} received</span>
+                  <span className="text-xs leading-5">Seen by this browser; runtime token counts arrive in the receipt.</span>
+                </p>
+              )}
               {(run.output || run.phase === "running") && (
-                <pre className={`max-h-[50vh] overflow-auto whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed ${run.phase === "running" ? "caret" : ""}`} aria-live="polite">{run.output}</pre>
+                <pre className={`max-h-[50vh] overflow-auto whitespace-pre-wrap break-words font-mono text-[13.5px] leading-relaxed ${run.phase === "running" ? "caret" : ""}`}>{run.output}</pre>
               )}
               {run.receipt && run.receipt.status !== "CREATED" && (run.phase === "done" || run.phase === "failed" || run.phase === "cancelled") && (
                 <div className="border-t border-line pt-5"><ReceiptView r={run.receipt} browser={{ e2e: run.tDone ? Math.round(run.tDone - run.t0) : null, ttft: run.tFirst ? Math.round(run.tFirst - run.t0) : null }} /></div>
               )}
             </div>
           )}
+          <p className="sr-only" aria-live="polite">{run ? runText(run) : ""}</p>
         </Panel>
       </div>
       <Panel title="Compare with my local model">
@@ -284,7 +310,7 @@ function applyEvent(cur: Run | null, m: { type: string; [k: string]: any }, now:
     case "request.queued": return { ...cur, phase: "queued" };
     case "request.routed": return { ...cur, phase: "routed", nodeName: m.node_name, reason: m.reason };
     case "request.started": return { ...cur, phase: "running" };
-    case "request.token": return { ...cur, phase: "running", output: cur.output + m.text, tFirst: cur.tFirst ?? now };
+    case "request.token": return { ...cur, phase: "running", output: cur.output + m.text, chunks: cur.chunks + 1, tFirst: cur.tFirst ?? now };
     case "request.completed": return { ...cur, phase: "done", receipt: m.receipt, tDone: now };
     case "request.failed": return { ...cur, phase: "failed", error: m.message, receipt: m.receipt, tDone: now };
     case "request.cancelled": return { ...cur, phase: "cancelled", receipt: m.receipt, tDone: now };
@@ -292,8 +318,12 @@ function applyEvent(cur: Run | null, m: { type: string; [k: string]: any }, now:
   return cur;
 }
 
+function runText(run: Run) {
+  return { sending: "Sending…", queued: "Waiting for a free worker…", routed: `Routed to ${run.nodeName}`, running: `Generating on ${run.nodeName ?? "worker"}`, done: `Done on ${run.nodeName ?? run.receipt?.node?.display_name ?? "worker"}`, failed: "Failed", cancelled: "Cancelled" }[run.phase];
+}
+
 function RunTitle({ run }: { run: Run }) {
-  const text = { sending: "Sending…", queued: "Waiting for a free worker…", routed: `Routed to ${run.nodeName}`, running: `Generating on ${run.nodeName ?? "worker"}`, done: `Done on ${run.nodeName ?? run.receipt?.node?.display_name ?? "worker"}`, failed: "Failed", cancelled: "Cancelled" }[run.phase];
+  const text = runText(run);
   return <span className="flex items-center gap-2">{["sending", "queued", "routed", "running"].includes(run.phase) && <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-mesh" />}{text}</span>;
 }
 
@@ -331,8 +361,9 @@ function BenchmarkView({ b }: { b: Benchmark }) {
 
 /* ---------------- Nodes ---------------- */
 
-export function NodesPage() {
+export function NodesPage({ share = false }: { share?: boolean }) {
   const { network } = useMesh();
+  useTick(5000);
   const nodes = network?.nodes ?? [];
   const [error, setError] = useState<string | null>(null);
   const act = async (n: NodeView, action: "pause" | "resume" | "revoke" | "refresh-models") => {
@@ -345,7 +376,7 @@ export function NodesPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Nodes</h1>
-      <ShareCompute />
+      <ShareCompute initialOpen={share} />
       {error && <ErrorNote>{error}</ErrorNote>}
       {nodes.length === 0 ? <Empty>No computers have joined yet.</Empty> : (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -382,10 +413,10 @@ function Field({ k, v, hint }: { k: string; v: string | null | undefined; hint?:
   return <div title={hint}><dt className="text-xs text-muted">{k}</dt><dd>{v || <span className="text-muted">Unavailable</span>}</dd></div>;
 }
 
-function ShareCompute() {
+function ShareCompute({ initialOpen }: { initialOpen: boolean }) {
   const [token, setToken] = useState<{ enrollment_token: string; expires_at: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const origin = location.origin;
   const command = `uv run ocm-agent --coordinator ${origin} --name "my-laptop"`;
   const make = async () => {
