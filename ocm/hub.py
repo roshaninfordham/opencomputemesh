@@ -509,8 +509,9 @@ class Hub:
             stats = o.payload.get("final_stats") or {}
             m = normalize_ollama(stats)
             job = row(self.db, "SELECT * FROM jobs WHERE id = ?", job_id)
+            done_reason = stats.get("done_reason")
             fields = {**m, "worker_elapsed_ms": int_or_none(o.payload.get("worker_elapsed_ms")), "completed_at": now(),
-                      "end_to_end_ms": ms_since(t0)}
+                      "end_to_end_ms": ms_since(t0), "done_reason": done_reason[:32] if isinstance(done_reason, str) else None}
             with self.db:
                 if job["status"] == "DISPATCHED":
                     transition(self.db, job_id, "RUNNING")
@@ -532,7 +533,7 @@ class Hub:
                     log_event(self.db, job_id, "credit_released", reason="usage_unavailable")
                 transition(self.db, job_id, "COMPLETED", **fields)
                 log_event(self.db, job_id, "worker_metric", duration_ms=fields["worker_elapsed_ms"],
-                          done_reason=stats.get("done_reason"))
+                          done_reason=fields["done_reason"])
                 log_event(self.db, job_id, "completed", duration_ms=fields["end_to_end_ms"])
             await emit("request.completed", receipt=self.receipt(job_id), output_chars=len(output))
             await self.broadcast_snapshot(job["network_id"])
@@ -601,7 +602,7 @@ class Hub:
                 "runtime_total": j["runtime_total_ms"], "runtime_load": j["runtime_load_ms"],
                 "prompt_eval": j["prompt_eval_ms"], "generation": j["generation_ms"]},
             "tokens_per_second": j["tokens_per_second"], "retry_count": j["retry_count"],
-            "cancel_effect": j["cancel_effect"],
+            "cancel_effect": j["cancel_effect"], "done_reason": j["done_reason"],
             "timestamps": {k: j[k] for k in ("created_at", "queued_at", "dispatched_at", "first_token_at", "completed_at")},
             "credits": {
                 "tariff": tariff and {"version": tariff["version"],

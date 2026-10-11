@@ -80,8 +80,9 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 """
 
 
-# measured_credits: uncapped tariff cost of the reported usage; settlement_capped: 1 if the debit was cut to the hold.
-ADDED_COLUMNS = {"jobs": {"measured_credits": "INTEGER", "settlement_capped": "INTEGER"}}
+# measured_credits: uncapped tariff cost of the reported usage; settlement_capped: 1 if the debit was cut to the hold;
+# done_reason: the runtime's reported stop reason ("stop", "length", ...), node-reported.
+ADDED_COLUMNS = {"jobs": {"measured_credits": "INTEGER", "settlement_capped": "INTEGER", "done_reason": "TEXT"}}
 
 
 def now() -> str:

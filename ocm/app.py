@@ -551,7 +551,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"id": f"chatcmpl-{result['id']}", "object": "chat.completion",
                 "created": int(parse_ts(result["created_at"]).timestamp()), "model": result["model_id"],
                 "choices": [{"index": 0, "message": {"role": "assistant", "content": result.get("_output", "")},
-                             "finish_reason": "stop"}],
+                             "finish_reason": "length" if r["done_reason"] == "length" else "stop"}],
                 "usage": usage_, "opencomputemesh": r}
 
     # ---------- WebSockets ----------

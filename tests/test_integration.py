@@ -307,6 +307,21 @@ async def test_overreported_usage_is_capped_at_the_hold(server):
     await ws.close(); await node.close()
 
 
+async def test_chat_completions_carries_done_reason(server):
+    base, app = server
+    prov, req = member(base, "prov"), member(base, "req")
+    node = await FakeNode(base, prov, ["m1"]).start()
+    key = req.post("/api/v1/session/api-key").json()["api_key"]
+    body = {"model": "m1", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 50}
+    async with httpx.AsyncClient(base_url=f"http://{base}", headers={"Authorization": f"Bearer {key}"}, timeout=10) as c:
+        r = (await c.post("/v1/chat/completions", json=body)).json()
+        assert r["choices"][0]["finish_reason"] == "stop" and r["opencomputemesh"]["done_reason"] == "stop"
+        node.final = {**FINAL, "done_reason": "length"}
+        r = (await c.post("/v1/chat/completions", json=body)).json()
+        assert r["choices"][0]["finish_reason"] == "length" and r["opencomputemesh"]["done_reason"] == "length"
+    await node.close()
+
+
 async def test_node_reconnect_fails_jobs_of_replaced_socket(server):
     base, app = server
     prov, req = member(base, "prov"), member(base, "req")
