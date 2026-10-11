@@ -1,0 +1,36 @@
+[project]
+name = "opencomputemesh"
+version = "0.1.0"
+description = "Share compute. Run models. See every token."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.0",
+    "httpx>=0.28.1",
+    "psutil>=7.2.2",
+    "segno>=1.6.6",
+    "uvicorn[standard]>=0.54.0",
+    "websockets>=17.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[project.scripts]
+ocm = "ocm.cli:main"
+ocm-agent = "ocm.agent:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ocm"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,9 @@
+data/
+.venv/
+__pycache__/
+*.pyc
+web/node_modules/
+web/dist/
+.env
+.pytest_cache/
+.playwright-mcp/
