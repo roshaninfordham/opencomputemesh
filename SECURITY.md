@@ -14,7 +14,7 @@ steps to reproduce, and the impact you expect.
 
 - Ways for a browser or node to act outside its own network, member, node or job
 - Ledger manipulation: double settlement, unbalanced transfers, edited history
-- Reaching a participant's Ollama runtime from anywhere but their own loopback agent
+- Reaching a participant's Ollama runtime from anywhere but their own agent — or, for a node the owner started with `--allow-remote-runtime`, from anywhere but that node
 - Leaks of a node's Gemini API key (it must travel only in the `x-goog-api-key` header to Google)
 - Prompts, outputs, cookies, tokens or join codes reaching Sentry or the TimescaleDB metrics sink. Sentry events are scrubbed in `ocm/observability.py` (`send_default_pii=False`, no request bodies, local variables, cookies or query strings, sensitive headers and token shapes redacted); the sink stores metric columns only.
 - Leaks of prompts, outputs, session cookies, enrollment tokens, node credentials or the admin token

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   credential_hash TEXT NOT NULL, display_name TEXT NOT NULL, platform TEXT, architecture TEXT,
   cpu_model TEXT, logical_cpu_count INTEGER, memory_total_bytes INTEGER, memory_available_bytes INTEGER,
   gpu_json TEXT NOT NULL DEFAULT '[]', runtime_name TEXT, runtime_version TEXT,
+  runtime_scope TEXT NOT NULL DEFAULT 'local',
   models_json TEXT NOT NULL DEFAULT '[]', sharing_enabled INTEGER NOT NULL DEFAULT 1,
   max_concurrent_jobs INTEGER NOT NULL DEFAULT 1, last_heartbeat_at TEXT,
   status TEXT NOT NULL DEFAULT 'PENDING', created_at TEXT NOT NULL, revoked_at TEXT
@@ -82,7 +83,8 @@ CREATE TABLE IF NOT EXISTS benchmarks (
 
 # measured_credits: uncapped tariff cost of the reported usage; settlement_capped: 1 if the debit was cut to the hold;
 # done_reason: the runtime's reported stop reason ("stop", "length", ...), node-reported.
-ADDED_COLUMNS = {"jobs": {"measured_credits": "INTEGER", "settlement_capped": "INTEGER", "done_reason": "TEXT"}}
+ADDED_COLUMNS = {"jobs": {"measured_credits": "INTEGER", "settlement_capped": "INTEGER", "done_reason": "TEXT"},
+                 "nodes": {"runtime_scope": "TEXT NOT NULL DEFAULT 'local'"}}
 
 
 def now() -> str:

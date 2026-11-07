@@ -1,5 +1,9 @@
-"""OpenComputeMesh node agent: outbound-only WebSocket to the coordinator; a loopback runtime (Ollama) or an
-explicitly opted-in cloud runtime (Gemini)."""
+"""OpenComputeMesh node agent: outbound-only WebSocket to the coordinator; a loopback runtime (Ollama), a
+runtime the owner hosts elsewhere and explicitly opted into, or an explicitly opted-in cloud runtime (Gemini).
+
+`runtime_scope` records which of those it is, because they do not carry the same guarantee: a runtime on
+another machine is nobody's loopback, so the node announces it as unattested instead of looking identical
+to one running on the same box as the agent."""
 
 import argparse
 import asyncio
@@ -83,6 +87,32 @@ def is_loopback_url(url: str) -> bool:
     return u.scheme in ("http", "https") and u.host in ("127.0.0.1", "localhost", "::1") and not u.userinfo
 
 
+def require_plain_runtime_url(url: str) -> None:
+    """A URL we will connect to on purpose: http(s), a real host, and no embedded credentials.
+    `http://127.0.0.1@evil.com` parses as host evil.com with userinfo, so it is refused, not normalised."""
+    try:
+        u = httpx.URL(url)
+    except httpx.InvalidURL:
+        raise SystemExit("Refusing an unparseable runtime URL.")
+    if u.scheme not in ("http", "https") or not u.host or u.userinfo:
+        raise SystemExit("Refusing a runtime URL that is not http(s) with a plain host (no credentials).")
+
+
+def runtime_scope(url: str, allow_remote: bool) -> str:
+    """Where the runtime lives: `local`, or `remote` when the owner opted into sharing a runtime they host
+    elsewhere. Remote is refused by default: it is another machine's process, and nothing about it is measured."""
+    if is_loopback_url(url):
+        return "local"
+    if not allow_remote:
+        raise SystemExit(
+            "Refusing a non-loopback runtime URL: the runtime must stay on this machine. "
+            "To share a runtime you already host elsewhere, pass --allow-remote-runtime "
+            "(or OCM_ALLOW_REMOTE_RUNTIME=1). This node is then labelled unattested."
+        )
+    require_plain_runtime_url(url)
+    return "remote"
+
+
 def prompt_token() -> str:
     if not sys.stdin.isatty():
         raise SystemExit("No saved credential: set OCM_ENROLLMENT_TOKEN or run interactively.")
@@ -100,8 +130,9 @@ def build_hello(state: dict, token: str | None, prompt=prompt_token) -> tuple[di
 
 class Agent:
     def __init__(self, coordinator: str, state_dir: Path, runtime: RuntimeAdapter, models_flag: str | None,
-                 name: str | None, max_jobs: int, heartbeat: int):
+                 name: str | None, max_jobs: int, heartbeat: int, runtime_scope: str = "local"):
         self.coordinator = coordinator.rstrip("/")
+        self.runtime_scope = runtime_scope
         self.state_path = state_dir / "node.json"
         self.runtime = runtime
         self.models_flag = models_flag
@@ -163,15 +194,34 @@ class Agent:
                 "cpu_model": cpu_model(), "logical_cpu_count": psutil.cpu_count(), "memory_total_bytes": vm.total,
                 "memory_available_bytes": vm.available, "gpus": self.gpus, "runtime_name": self.runtime.name,
                 "runtime_version": version, "runtime_healthy": bool(version), "models": models,
-                "max_concurrent_jobs": self.max_jobs}
+                "runtime_scope": self.runtime_scope, "max_concurrent_jobs": self.max_jobs}
 
     async def send(self, type_: str, **payload) -> None:
         msg = {"type": type_, "protocol_version": PROTOCOL_VERSION, "node_id": self.state.get("node_id"), **payload}
         async with self.send_lock:
             await self.ws.send(json.dumps(msg))
 
+    async def probe(self) -> None:
+        """A remote runtime is a stranger's process. Make it answer once per approved model before this node
+        announces them, so a URL that is up but serves nothing never reaches a requester."""
+        async def ignore(_text: str) -> None:
+            return None
+
+        for model_id in self.state.get("approved_models", []):
+            req = InferenceRequest(model_id=model_id, messages=[{"role": "user", "content": "ping"}], max_tokens=1)
+            try:
+                res = await asyncio.wait_for(self.runtime.generate_stream(req, ignore, asyncio.Event()), timeout=60)
+            except TimeoutError:
+                raise SystemExit(f"Remote runtime timed out on a probe for {model_id}; nothing was shared.")
+            if not res.ok:
+                raise SystemExit(f"Remote runtime failed a probe for {model_id}: {(res.error or 'no result')[:200]}")
+        say("probe passed for " + ", ".join(self.state.get("approved_models", [])))
+
     async def run_forever(self) -> None:
         await self.approve_models()
+        if self.runtime_scope == "remote":
+            say("remote runtime: this node serves a model on another machine. It is unattested; receipts will say so.")
+            await self.probe()
         if self.name:
             self.state["display_name"] = self.name
         backoff = 1.0
@@ -284,7 +334,12 @@ def main(argv: list[str] | None = None) -> None:
                    help="Where the node credential is stored (use a separate dir per simulated node)")
     p.add_argument("--runtime", choices=("ollama", "gemini"), default=os.environ.get("OCM_RUNTIME", "ollama"),
                    help="ollama: loopback runtime on this machine; gemini: Google's cloud API (env OCM_RUNTIME)")
-    p.add_argument("--ollama", default=os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434"))
+    p.add_argument("--ollama", default=os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+                   help="Runtime URL. Loopback by default; a non-loopback URL needs --allow-remote-runtime")
+    p.add_argument("--allow-remote-runtime", action="store_true",
+                   default=os.environ.get("OCM_ALLOW_REMOTE_RUNTIME", "") in ("1", "true", "yes"),
+                   help="Share an Ollama/vLLM the owner hosts elsewhere (env OCM_ALLOW_REMOTE_RUNTIME=1). "
+                        "The node is labelled unattested.")
     p.add_argument("--max-jobs", type=int, default=1)
     p.add_argument("--heartbeat", type=int, default=int(os.environ.get("OCM_NODE_HEARTBEAT_INTERVAL_SECONDS", 20)))
     a = p.parse_args(argv)
@@ -294,9 +349,9 @@ def main(argv: list[str] | None = None) -> None:
         if not key:
             raise SystemExit("--runtime gemini needs GEMINI_API_KEY (or GOOGLE_API_KEY) set in the environment.")
         runtime: RuntimeAdapter = GeminiAdapter(key)
+        scope = "cloud"
     elif a.runtime == "ollama":
-        if not is_loopback_url(a.ollama):
-            raise SystemExit("Refusing a non-loopback Ollama URL: the runtime must stay on this machine.")
+        scope = runtime_scope(a.ollama, a.allow_remote_runtime)
         runtime = OllamaAdapter(a.ollama)
     else:
         raise SystemExit(f"Unknown runtime {a.runtime!r} (OCM_RUNTIME): use ollama or gemini.")
@@ -309,7 +364,7 @@ def main(argv: list[str] | None = None) -> None:
         say("coordinator URL changed; re-using saved node credential (tunnel URLs change on restart)")
     if a.runtime == "gemini":
         say("cloud runtime: prompts sent to this node are forwarded to Google's Gemini API (generativelanguage.googleapis.com)")
-    agent = Agent(coordinator, state_dir, runtime, a.models, a.name, a.max_jobs, a.heartbeat)
+    agent = Agent(coordinator, state_dir, runtime, a.models, a.name, a.max_jobs, a.heartbeat, runtime_scope=scope)
     try:
         asyncio.run(agent.run_forever())
     except KeyboardInterrupt:

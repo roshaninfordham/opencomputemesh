@@ -586,7 +586,8 @@ class Hub:
 
     def receipt(self, job_id: str) -> dict:
         j = row(self.db, "SELECT * FROM jobs WHERE id = ?", job_id)
-        node = row(self.db, "SELECT id, display_name, owner_member_id, runtime_name, runtime_version FROM nodes WHERE id = ?",
+        node = row(self.db, "SELECT id, display_name, owner_member_id, runtime_name, runtime_version, runtime_scope\
+                              FROM nodes WHERE id = ?",
                    j["selected_node_id"]) if j["selected_node_id"] else None
         provider = row(self.db, "SELECT nickname FROM members WHERE id = ?", j["provider_member_id"]) if j["provider_member_id"] else None
         requester = row(self.db, "SELECT nickname FROM members WHERE id = ?", j["requester_member_id"])
@@ -598,7 +599,9 @@ class Hub:
             "request_id": j["id"], "kind": j["kind"], "status": j["status"], "failure_code": j["failure_code"],
             "model_id": j["model_id"], "model_digest": j["model_digest"],
             "node": {"id": node["id"], "display_name": node["display_name"], "owner_nickname": provider and provider["nickname"],
-                     "runtime": f"{node['runtime_name']} {node['runtime_version'] or ''}".strip()} if node else None,
+                     "runtime": f"{node['runtime_name']} {node['runtime_version'] or ''}".strip(),
+                     # The rung that produced these tokens, and the honest answer to "is it attested?".
+                     "runtime_scope": node["runtime_scope"], "attested": False} if node else None,
             "requester_nickname": requester["nickname"], "route_reason": j["route_reason"],
             "tokens": {"input": j["input_tokens"], "output": j["output_tokens"],
                        "total": j["input_tokens"] + j["output_tokens"] if known else None, "source": j["token_count_source"]},

@@ -130,7 +130,7 @@ uv run ocm-agent --coordinator http://127.0.0.1:8000 --models qwen2.5:1.5b --nam
 
 The agent asks for the token with a hidden prompt. For non-interactive runs set `OCM_ENROLLMENT_TOKEN` in the environment instead. After enrollment the agent saves a node credential to `~/.opencomputemesh/node.json` (mode 0600). Later runs reuse it and need no token. Use `--state-dir DIR` to keep a separate credential per node, for example when simulating two nodes on one machine.
 
-Other agent flags: `--runtime` (`ollama` or `gemini`, default from `OCM_RUNTIME`, else `ollama`), `--ollama` (default `http://127.0.0.1:11434`, loopback only), `--max-jobs` (default 1), `--heartbeat` (seconds, default 20). `--coordinator` can also come from `OCM_COORDINATOR` or from the saved state.
+Other agent flags: `--runtime` (`ollama` or `gemini`, default from `OCM_RUNTIME`, else `ollama`), `--ollama` (default `http://127.0.0.1:11434`; loopback unless `--allow-remote-runtime`), `--allow-remote-runtime` (share a runtime this machine does not host; the node is labelled unattested), `--max-jobs` (default 1), `--heartbeat` (seconds, default 20). `--coordinator` can also come from `OCM_COORDINATOR` or from the saved state.
 
 Optional sponsor integrations (each is independent; see [Sponsor technologies](#sponsor-technologies)):
 
@@ -226,7 +226,7 @@ OpenCompute Credits (OCC) are non-cash demo accounting units. All amounts are st
 
 ## Security model
 
-- **Loopback-only runtime.** `ocm-agent` and `ocm-node` refuse an `--ollama` URL whose host is not `127.0.0.1`, `localhost` or `[::1]`. The URL is parsed (`httpx.URL` in Python), not string-matched, so `http://127.0.0.1@evil.com` is rejected, and the Ollama client ignores `HTTP(S)_PROXY` (`trust_env=False`). The agent opens no listening sockets.
+- **Loopback runtime unless the owner opts out of it.** `ocm-agent` and `ocm-node` refuse an `--ollama` URL whose host is not `127.0.0.1`, `localhost` or `[::1]` unless the owner passes `--allow-remote-runtime` (`OCM_ALLOW_REMOTE_RUNTIME=1`). A remote runtime is a machine the owner hosts elsewhere, so the node probes it once per shared model before enrolling, says so at startup, and every receipt it produces carries `runtime_scope: "remote"` and `attested: false`. It is never routed confidential-tier traffic. `ocm-node` has no such flag yet. The URL is parsed (`httpx.URL` in Python), not string-matched, so `http://127.0.0.1@evil.com` is rejected with or without the flag, and the Ollama client ignores `HTTP(S)_PROXY` (`trust_env=False`). The agent opens no listening sockets.
 - **Cloud runtime is explicit.** `--runtime gemini` is the one deliberate exception to loopback-only: prompts routed to that node go to Google's Gemini API, and the agent says so at startup. The API key is read from `GEMINI_API_KEY` or `GOOGLE_API_KEY`, removed from the process environment, and sent only in the `x-goog-api-key` header.
 - **Optional telemetry.** The TimescaleDB sink writes metric columns only (no prompt or output column exists) and never logs its URL. Sentry is off without `SENTRY_DSN` and scrubs every event, transaction and breadcrumb before sending (see [Sentry](#sentry-opt-in-error-monitoring-that-cannot-leak-prompts)). It connects out to `/ws/node` (`wss://` when the coordinator URL is `https://`).
 - **Explicit model approval.** A node shares only the installed models named with `--models` (or chosen at the interactive prompt). Jobs for any other model are refused with `MODEL_NOT_SHARED`. The agent never pulls models.

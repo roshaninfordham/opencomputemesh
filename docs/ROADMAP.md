@@ -173,8 +173,15 @@ most expensive to build: WebGPU inference plus the frame protocol compiled to
 WASM. It also yields the least capacity per contributor, so it follows T0 rather
 than preceding it.
 
-Sequencing: T0 and T2 land with the Rust node in v0.2 (Phase 1.3), so the
-capability is written once instead of twice.
+Sequencing: T0 ships in `ocm-agent` first, because that is the agent serving
+traffic today; `ocm-node` (Rust) gains the same flag at the v0.2 cutover. That is
+a deliberate double-write, taken because no-install contribution is worth having
+before the Python agent is deleted, and it is confined to one flag, one probe and
+one capability field.
+
+Status: T0 shipped in `ocm-agent` — `--allow-remote-runtime`, a startup probe per
+shared model, `runtime_scope` on the node, and `runtime_scope` + `attested: false`
+on the receipt.
 
 ### Outcomes
 

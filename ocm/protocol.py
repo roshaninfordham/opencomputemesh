@@ -37,6 +37,9 @@ class Capabilities(BaseModel):
     runtime_name: str = Field(default="ollama", max_length=32)
     runtime_version: str | None = Field(default=None, max_length=32)
     runtime_healthy: bool = False
+    # local: the runtime is on this machine. remote: the owner hosts it elsewhere and opted in.
+    # cloud: a hosted API behind the same adapter. Only `local` was ever measured by the agent.
+    runtime_scope: Literal["local", "remote", "cloud"] = "local"
     models: list[ModelInfo] = Field(default_factory=list, max_length=200)
     max_concurrent_jobs: int = Field(default=1, ge=1, le=8)
 

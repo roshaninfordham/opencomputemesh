@@ -661,7 +661,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                       "cpu_model": caps.cpu_model, "logical_cpu_count": caps.logical_cpu_count,
                       "memory_total_bytes": caps.memory_total_bytes, "memory_available_bytes": caps.memory_available_bytes,
                       "gpu_json": dumps([g.model_dump() for g in caps.gpus]), "runtime_name": caps.runtime_name,
-                      "runtime_version": caps.runtime_version, "models_json": dumps([m.model_dump() for m in caps.models]),
+                      "runtime_version": caps.runtime_version, "runtime_scope": caps.runtime_scope,
+                      "models_json": dumps([m.model_dump() for m in caps.models]),
                       "max_concurrent_jobs": min(caps.max_concurrent_jobs, s.max_concurrent_jobs_per_node)}
         if hello.type == "node.enroll":
             tok = row(db, "SELECT * FROM enrollment_tokens WHERE token_hash = ?", sha256(hello.enrollment_token or ""))
