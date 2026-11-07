@@ -1,3 +1,5 @@
+//! Integration tests.
+
 use ocm_proto::*;
 
 fn caps() -> Capabilities {
@@ -8,7 +10,11 @@ fn caps() -> Capabilities {
         cpu: Some("Apple M5".into()),
         cores: Some(10),
         mem_total: Some(16 << 30),
-        accelerators: vec![Accelerator { name: "Apple M5".into(), mem: None, source: "system_profiler".into() }],
+        accelerators: vec![Accelerator {
+            name: "Apple M5".into(),
+            mem: None,
+            source: "system_profiler".into(),
+        }],
         models: vec![ModelInfo {
             id: "qwen2.5:1.5b".into(),
             digest: "65ec0654".into(),
@@ -23,15 +29,27 @@ fn caps() -> Capabilities {
 
 fn samples() -> Vec<Body> {
     vec![
-        Body::Hello(Hello { enrollment_token: Some("ocme_x".into()), node_id: None, public_key: "ab".repeat(32), caps: caps() }),
+        Body::Hello(Hello {
+            enrollment_token: Some("ocme_x".into()),
+            node_id: None,
+            public_key: "ab".repeat(32),
+            caps: caps(),
+        }),
         Body::Welcome(Welcome { node_id: "n1".into() }),
-        Body::Heartbeat(Heartbeat { healthy: true, mem_free: Some(1 << 30), loaded: vec!["65ec0654".into()] }),
+        Body::Heartbeat(Heartbeat {
+            healthy: true,
+            mem_free: Some(1 << 30),
+            loaded: vec!["65ec0654".into()],
+        }),
         Body::Capabilities(caps()),
         Body::JobStart(JobStart {
             job: "j1".into(),
             model: "qwen2.5:1.5b".into(),
             digest: "65ec0654".into(),
-            messages: vec![Message { role: Role::User, content: "hi".into() }],
+            messages: vec![Message {
+                role: Role::User,
+                content: "hi".into(),
+            }],
             max_tokens: 64,
             temperature: Some(0.0),
             top_p: None,
@@ -40,7 +58,11 @@ fn samples() -> Vec<Body> {
         }),
         Body::JobCancel(JobRef { job: "j1".into() }),
         Body::JobStarted(JobRef { job: "j1".into() }),
-        Body::JobToken(JobToken { job: "j1".into(), seq: 1, text: "Hel".into() }),
+        Body::JobToken(JobToken {
+            job: "j1".into(),
+            seq: 1,
+            text: "Hel".into(),
+        }),
         Body::JobCompleted(JobCompleted {
             job: "j1".into(),
             usage: Usage {
@@ -55,8 +77,16 @@ fn samples() -> Vec<Body> {
             ttft_ms: Some(5),
             done_reason: Some(DoneReason::Stop),
         }),
-        Body::JobFailed(JobFailed { job: "j1".into(), code: FailCode::Runtime, started: true, worker_ms: Some(4) }),
-        Body::Error(ErrorMsg { code: "RETRY_LATER".into(), message: "queue full".into() }),
+        Body::JobFailed(JobFailed {
+            job: "j1".into(),
+            code: FailCode::Runtime,
+            started: true,
+            worker_ms: Some(4),
+        }),
+        Body::Error(ErrorMsg {
+            code: "RETRY_LATER".into(),
+            message: "queue full".into(),
+        }),
         Body::Ping,
         Body::Pong,
     ]
@@ -84,5 +114,5 @@ fn unknown_type_is_rejected() {
 
 #[test]
 fn result_bodies_require_signatures() {
-    assert!(samples().iter().filter(|b| b.requires_signature()).count() == 2);
+    assert_eq!(samples().iter().filter(|b| b.requires_signature()).count(), 2);
 }
