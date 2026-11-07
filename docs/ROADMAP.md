@@ -187,7 +187,7 @@ one capability field.
 
 Status: T0 shipped in `ocm-agent` — `--allow-remote-runtime`, a startup probe per
 shared model, `runtime_scope` on the node, and `runtime_scope` + `attested: false`
-on the receipt.
+on the receipt. `ocm-node` has parity.
 
 ### Outcomes
 

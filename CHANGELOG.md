@@ -27,8 +27,9 @@ built web bundle. See `docs/RELEASING.md`.
 - `tools/tinfoil-gateway`: container packaging (`Dockerfile`, `tinfoil-config.yml`, publish path) so
   the gateway can run as an attested Tinfoil Container and callers install nothing.
 - `ocm-agent`: `--allow-remote-runtime` shares a runtime the owner hosts elsewhere, so a contributor
-  can join without installing anything on the machine with the GPU. The node probes each shared model
-  before enrolling, and its receipts carry `runtime_scope` and `attested: false`.
+  can join without installing anything on the machine with the GPU. The node probes each shared  model before enrolling, and its receipts carry `runtime_scope` and `attested: false`.
+- `ocm-node` matches it: `--allow-remote-runtime`, a startup probe per shared model, and `remote`
+  plus `attested: false` on receipts.
 
 ### Changed
 - `tools/tinfoil-gateway`: a non-loopback bind now requires `GATEWAY_TOKEN` and the process exits

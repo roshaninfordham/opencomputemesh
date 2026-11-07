@@ -80,7 +80,10 @@ pub struct ChatResult {
 
 impl ChatResult {
     fn err(msg: impl Into<String>) -> Self {
-        ChatResult { error: Some(msg.into()), ..Default::default() }
+        ChatResult {
+            error: Some(msg.into()),
+            ..Default::default()
+        }
     }
 }
 
@@ -105,20 +108,38 @@ impl Ollama {
             .connect_timeout(Duration::from_secs(5))
             .read_timeout(Duration::from_secs(180))
             .build()?;
-        Ok(Ollama { base: base.trim_end_matches('/').to_owned(), client })
+        Ok(Ollama {
+            base: base.trim_end_matches('/').to_owned(),
+            client,
+        })
     }
 
     /// Runtime version, or None if unreachable.
     pub async fn health(&self) -> Option<String> {
-        let r = self.client.get(format!("{}/api/version", self.base)).timeout(Duration::from_secs(10)).send().await.ok()?;
+        let r = self
+            .client
+            .get(format!("{}/api/version", self.base))
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+            .ok()?;
         let v: Value = r.error_for_status().ok()?.json().await.ok()?;
         str_field(&v, "version")
     }
 
     pub async fn list_models(&self) -> Result<Vec<Model>> {
-        let r = self.client.get(format!("{}/api/tags", self.base)).timeout(Duration::from_secs(30)).send().await?;
+        let r = self
+            .client
+            .get(format!("{}/api/tags", self.base))
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
         let v: Value = r.error_for_status()?.json().await?;
-        let models = v.get("models").and_then(Value::as_array).cloned().unwrap_or_default();
+        let models = v
+            .get("models")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         Ok(models
             .iter()
             .filter_map(|m| {
@@ -137,7 +158,12 @@ impl Ollama {
 
     /// Streams a chat completion. Returning (or dropping this future) drops the HTTP
     /// connection, which makes Ollama abort generation.
-    pub async fn chat(&self, req: ChatRequest, mut on_token: impl FnMut(&str), cancel: &Notify) -> ChatResult {
+    pub async fn chat(
+        &self,
+        req: ChatRequest,
+        mut on_token: impl FnMut(&str),
+        cancel: &Notify,
+    ) -> ChatResult {
         let mut options = json!({ "num_predict": req.max_tokens });
         if let Some(t) = req.temperature {
             options["temperature"] = json!(t);
@@ -149,14 +175,24 @@ impl Ollama {
         let body = json!({ "model": req.model, "messages": req.messages, "stream": true, "think": false, "options": options });
         let start = Instant::now();
         let mut ttft = None;
-        let resp = match self.client.post(format!("{}/api/chat", self.base)).json(&body).send().await {
+        let resp = match self
+            .client
+            .post(format!("{}/api/chat", self.base))
+            .json(&body)
+            .send()
+            .await
+        {
             Ok(r) => r,
             Err(e) => return ChatResult::err(format!("runtime connection error: {}", reqwest_kind(&e))),
         };
         let status = resp.status();
         if status != reqwest::StatusCode::OK {
             let detail = resp.text().await.unwrap_or_default();
-            return ChatResult::err(format!("runtime HTTP {}: {}", status.as_u16(), truncate(&detail, 200)));
+            return ChatResult::err(format!(
+                "runtime HTTP {}: {}",
+                status.as_u16(),
+                truncate(&detail, 200)
+            ));
         }
         let mut decoder = NdjsonDecoder::default();
         let mut stream = resp.bytes_stream();
@@ -178,14 +214,19 @@ impl Ollama {
                     let msg = err.as_str().map(str::to_owned).unwrap_or_else(|| err.to_string());
                     return ChatResult::err(format!("runtime error: {}", truncate(&msg, 200)));
                 }
-                let content = chunk.pointer("/message/content").and_then(Value::as_str).unwrap_or("");
+                let content = chunk
+                    .pointer("/message/content")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
                 if !content.is_empty() {
                     ttft.get_or_insert_with(|| ms_since(start));
                     on_token(content);
                 }
                 if chunk.get("done").and_then(Value::as_bool) == Some(true) {
-                    let final_stats =
-                        FINAL_STAT_KEYS.iter().filter_map(|&k| chunk.get(k).map(|v| (k.to_owned(), v.clone()))).collect();
+                    let final_stats = FINAL_STAT_KEYS
+                        .iter()
+                        .filter_map(|&k| chunk.get(k).map(|v| (k.to_owned(), v.clone())))
+                        .collect();
                     return ChatResult {
                         ok: true,
                         final_stats,
@@ -238,7 +279,10 @@ mod tests {
             let last = out.last().unwrap();
             assert_eq!(last["done"], true);
             assert_eq!(last["eval_count"], 10);
-            let text: String = out.iter().filter_map(|c| c.pointer("/message/content")?.as_str()).collect();
+            let text: String = out
+                .iter()
+                .filter_map(|c| c.pointer("/message/content")?.as_str())
+                .collect();
             assert!(text.starts_with("Hello!"));
         }
     }

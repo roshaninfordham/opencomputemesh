@@ -32,7 +32,9 @@ impl State {
 
     pub fn load(path: &Path) -> Result<State> {
         match fs::read_to_string(path) {
-            Ok(text) => serde_json::from_str(&text).with_context(|| format!("corrupt state file {}", path.display())),
+            Ok(text) => {
+                serde_json::from_str(&text).with_context(|| format!("corrupt state file {}", path.display()))
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(State::default()),
             Err(e) => Err(e).with_context(|| format!("cannot read {}", path.display())),
         }
@@ -71,7 +73,12 @@ fn create_private_dir(dir: &Path) -> Result<()> {
 #[cfg(unix)]
 fn open_private(path: &Path) -> Result<fs::File> {
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-    let f = fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+    let f = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
     f.set_permissions(fs::Permissions::from_mode(0o600))?; // tmp may pre-exist with wider bits
     Ok(f)
 }
@@ -105,7 +112,10 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
-            assert_eq!(fs::metadata(path.parent().unwrap()).unwrap().permissions().mode() & 0o777, 0o700);
+            assert_eq!(
+                fs::metadata(path.parent().unwrap()).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
         }
 
         // A file as the Python agent writes it after a revoke (credential/node_id popped).

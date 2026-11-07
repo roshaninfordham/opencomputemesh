@@ -1,5 +1,6 @@
-//! OpenComputeMesh node agent: outbound-only WebSocket to the coordinator,
-//! loopback-only access to the local Ollama runtime. Wire-compatible with `ocm/agent.py`.
+//! OpenComputeMesh node agent: outbound-only WebSocket to the coordinator; a loopback runtime
+//! (Ollama), or a runtime the owner hosts elsewhere and explicitly opted into. Wire-compatible
+//! with `ocm/agent.py`.
 
 mod ollama;
 mod state;
@@ -43,7 +44,11 @@ fn fatal_close_reason(code: Option<u16>) -> Option<&'static str> {
 }
 
 #[derive(Parser)]
-#[command(name = "ocm-node", version, about = "Share local Ollama models with an OpenComputeMesh network.")]
+#[command(
+    name = "ocm-node",
+    version,
+    about = "Share local Ollama models with an OpenComputeMesh network."
+)]
 struct Args {
     /// Coordinator origin, e.g. https://example.trycloudflare.com
     #[arg(long, env = "OCM_COORDINATOR")]
@@ -57,9 +62,13 @@ struct Args {
     /// Where the node credential is stored [default: ~/.opencomputemesh]
     #[arg(long, env = "OCM_AGENT_STATE_DIR")]
     state_dir: Option<String>,
-    /// Ollama base URL; must be a loopback address
+    /// Ollama base URL. Loopback by default; a non-loopback URL needs --allow-remote-runtime
     #[arg(long, env = "OLLAMA_BASE_URL", default_value = "http://127.0.0.1:11434")]
     ollama: String,
+    /// Share a runtime the owner hosts elsewhere; the node is labelled unattested.
+    /// Loopback URLs do not need it. Also settable with OCM_ALLOW_REMOTE_RUNTIME=1|true|yes.
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    allow_remote_runtime: bool,
     #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=8))]
     max_jobs: u32,
     /// Heartbeat interval in seconds
@@ -67,17 +76,67 @@ struct Args {
     heartbeat: u64,
 }
 
-/// The runtime must stay on this machine (same host set as the Python agent).
+/// Parsed, not string-matched: `http://127.0.0.1@evil.com` connects to evil.com.
+/// Credentials embedded in the URL are never loopback, even against a loopback host.
 fn is_loopback_url(url: &str) -> bool {
     reqwest::Url::parse(url)
         .ok()
         .filter(|u| matches!(u.scheme(), "http" | "https"))
-        .and_then(|u| u.host_str().map(|h| matches!(h, "127.0.0.1" | "localhost" | "[::1]")))
+        .filter(|u| u.username().is_empty() && u.password().is_none())
+        .and_then(|u| {
+            u.host_str()
+                .map(|h| matches!(h, "127.0.0.1" | "localhost" | "[::1]" | "::1"))
+        })
+        .unwrap_or(false)
+}
+
+/// A URL we will connect to on purpose: http(s), a real host, and no embedded credentials.
+/// `http://127.0.0.1@evil.com` parses as host evil.com with userinfo, so it is refused, not normalised.
+fn require_plain_runtime_url(url: &str) -> Result<()> {
+    let parsed =
+        reqwest::Url::parse(url).map_err(|_| anyhow::anyhow!("Refusing an unparseable runtime URL."))?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none_or(str::is_empty)
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        bail!("Refusing a runtime URL that is not http(s) with a plain host (no credentials).");
+    }
+    Ok(())
+}
+
+/// Where the runtime lives: `local`, or `remote` when the owner opted into sharing a runtime
+/// they host elsewhere. Remote is refused by default: another machine's process, nothing measured.
+fn runtime_scope(url: &str, allow_remote: bool) -> Result<&'static str> {
+    if is_loopback_url(url) {
+        return Ok("local");
+    }
+    if !allow_remote {
+        bail!(
+            "Refusing a non-loopback Ollama URL: the runtime must stay on this machine. To share a runtime \
+                you already host elsewhere, pass --allow-remote-runtime (or OCM_ALLOW_REMOTE_RUNTIME=1|true|yes). \
+                This node is then labelled unattested."
+        );
+    }
+    require_plain_runtime_url(url)?;
+    Ok("remote")
+}
+
+/// Same truthy set as the Python agent, parsed explicitly so it cannot drift with a clap upgrade:
+/// `1`, `true`, `yes` (after trimming; anything else is off).
+fn allow_remote_from(flag: bool) -> bool {
+    if flag {
+        return true;
+    }
+    std::env::var("OCM_ALLOW_REMOTE_RUNTIME")
+        .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
         .unwrap_or(false)
 }
 
 fn ws_url(coordinator: &str) -> String {
-    let base = coordinator.replacen("https://", "wss://", 1).replacen("http://", "ws://", 1);
+    let base = coordinator
+        .replacen("https://", "wss://", 1)
+        .replacen("http://", "ws://", 1);
     format!("{base}/ws/node")
 }
 
@@ -119,6 +178,7 @@ struct Agent {
     coordinator: String,
     state_path: PathBuf,
     state: State,
+    runtime_scope: &'static str,
     ollama: Ollama,
     models_flag: Option<String>,
     name: Option<String>,
@@ -138,13 +198,27 @@ impl Agent {
         if self.ollama.health().await.is_none() {
             bail!("Ollama is not reachable on loopback. Start it with `ollama serve` and retry.");
         }
-        let mut installed: Vec<String> =
-            self.ollama.list_models().await.context("cannot list Ollama models")?.into_iter().map(|m| m.model_id).collect();
+        let mut installed: Vec<String> = self
+            .ollama
+            .list_models()
+            .await
+            .context("cannot list Ollama models")?
+            .into_iter()
+            .map(|m| m.model_id)
+            .collect();
         installed.sort();
         if installed.is_empty() {
-            bail!("Ollama has no models installed. Pull one yourself first, e.g. `ollama pull qwen2.5:1.5b`.");
+            bail!(
+                "Ollama has no models installed. Pull one yourself first, e.g. `ollama pull qwen2.5:1.5b`."
+            );
         }
-        let split = |s: &str| s.split(',').map(str::trim).filter(|m| !m.is_empty()).map(String::from).collect::<Vec<_>>();
+        let split = |s: &str| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|m| !m.is_empty())
+                .map(String::from)
+                .collect::<Vec<_>>()
+        };
         let chosen = if let Some(flag) = &self.models_flag {
             split(flag)
         } else if !self.state.approved_models.is_empty() {
@@ -159,10 +233,21 @@ impl Agent {
         } else {
             bail!("Pass --models to approve which installed models this node shares.");
         };
-        let missing: Vec<&str> = chosen.iter().filter(|m| !installed.contains(m)).map(String::as_str).collect();
+        let missing: Vec<&str> = chosen
+            .iter()
+            .filter(|m| !installed.contains(m))
+            .map(String::as_str)
+            .collect();
         if chosen.is_empty() || !missing.is_empty() {
-            let missing = if missing.is_empty() { "(none chosen)".to_string() } else { missing.join(", ") };
-            bail!("Not installed locally: {missing}. Installed: {}", installed.join(", "));
+            let missing = if missing.is_empty() {
+                "(none chosen)".to_string()
+            } else {
+                missing.join(", ")
+            };
+            bail!(
+                "Not installed locally: {missing}. Installed: {}",
+                installed.join(", ")
+            );
         }
         self.state.approved_models = chosen;
         self.save()
@@ -172,8 +257,9 @@ impl Agent {
         let version = self.ollama.health().await;
         let mut models = Vec::new();
         if version.is_some()
-            && let Ok(list) = self.ollama.list_models().await {
-                models = list
+            && let Ok(list) = self.ollama.list_models().await
+        {
+            models = list
                     .into_iter()
                     .filter(|m| self.state.approved_models.contains(&m.model_id))
                     .map(|m| {
@@ -182,26 +268,65 @@ impl Agent {
                                 "size_bytes": m.size_bytes })
                     })
                     .collect();
-            }
+        }
         // Coordinator requires a non-empty display_name.
-        let display_name = [self.state.display_name.as_deref(), Some(self.host.hostname.as_str())]
-            .into_iter()
-            .flatten()
-            .map(str::trim)
-            .find(|n| !n.is_empty())
-            .unwrap_or("node");
+        let display_name = [
+            self.state.display_name.as_deref(),
+            Some(self.host.hostname.as_str()),
+        ]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|n| !n.is_empty())
+        .unwrap_or("node");
         let h = &self.host;
         json!({
             "display_name": truncate(display_name, 48), "platform": h.platform, "architecture": h.architecture,
             "cpu_model": h.cpu_model, "logical_cpu_count": h.logical_cpu_count,
             "memory_total_bytes": h.memory_total_bytes, "memory_available_bytes": telemetry::memory_available_bytes(),
             "gpus": h.gpus, "runtime_name": "ollama", "runtime_version": version.as_deref().map(|v| truncate(v, 32)),
-            "runtime_healthy": version.is_some(), "models": models, "max_concurrent_jobs": self.max_jobs,
+            "runtime_healthy": version.is_some(), "models": models, "runtime_scope": self.runtime_scope,
+            "max_concurrent_jobs": self.max_jobs,
         })
+    }
+
+    /// A remote runtime is a stranger's process. Make it answer once per approved model before
+    /// this node announces them, so a URL that is up but serves nothing never reaches a requester.
+    async fn probe(&self) -> Result<()> {
+        for m in &self.state.approved_models {
+            let req = ChatRequest {
+                model: m.clone(),
+                messages: json!([{ "role": "user", "content": "ping" }]),
+                max_tokens: 1,
+                temperature: None,
+                top_p: None,
+            };
+            let cancel = Notify::new();
+            let res = timeout(Duration::from_secs(60), self.ollama.chat(req, |_| {}, &cancel))
+                .await
+                .map_err(|_| {
+                    anyhow::anyhow!("Remote runtime timed out on a probe for {m}; nothing was shared.")
+                })?;
+            if !res.ok {
+                let detail: String = res.error.unwrap_or_default().chars().take(200).collect();
+                bail!("Remote runtime failed a probe for {m}: {detail}");
+            }
+        }
+        say(format!(
+            "probe passed for {}",
+            self.state.approved_models.join(", ")
+        ));
+        Ok(())
     }
 
     async fn run_forever(mut self) -> Result<()> {
         self.approve_models().await?;
+        if self.runtime_scope == "remote" {
+            say(
+                "remote runtime: this node serves a model on another machine. It is unattested; receipts will say so.",
+            );
+            self.probe().await?;
+        }
         if let Some(n) = &self.name {
             self.state.display_name = Some(n.clone());
         }
@@ -217,17 +342,25 @@ impl Agent {
                         }
                         bail!("Coordinator closed the connection: {reason}.");
                     }
-                    say(format!("connection closed ({}); reconnecting", code.map_or("none".into(), |c| c.to_string())));
+                    say(format!(
+                        "connection closed ({}); reconnecting",
+                        code.map_or("none".into(), |c| c.to_string())
+                    ));
                     if registered {
                         backoff = 1.0;
                     }
                 }
-                End::Unreachable(why) => say(format!("cannot reach coordinator ({why}); retrying in {backoff:.0}s")),
+                End::Unreachable(why) => say(format!(
+                    "cannot reach coordinator ({why}); retrying in {backoff:.0}s"
+                )),
             }
             for n in self.cancels.lock().expect("cancels lock").values() {
                 n.notify_one();
             }
-            tokio::time::sleep(Duration::from_secs_f64(backoff + rand::random_range(0.0..backoff / 2.0))).await;
+            tokio::time::sleep(Duration::from_secs_f64(
+                backoff + rand::random_range(0.0..backoff / 2.0),
+            ))
+            .await;
             backoff = (backoff * 2.0).min(60.0);
         }
     }
@@ -237,7 +370,9 @@ impl Agent {
             if !std::io::stdin().is_terminal() {
                 bail!("No saved credential: set OCM_ENROLLMENT_TOKEN or run interactively.");
             }
-            Ok(rpassword::prompt_password("One-time enrollment token (from the Share my compute page): ")?)
+            Ok(rpassword::prompt_password(
+                "One-time enrollment token (from the Share my compute page): ",
+            )?)
         })
     }
 
@@ -245,7 +380,12 @@ impl Agent {
     async fn session(&mut self) -> Result<End> {
         // Resolve the hello (possibly prompting) before connecting: the coordinator allows 15s for it.
         let mut hello = self.hello()?;
-        let ws = match timeout(OPEN_TIMEOUT, tokio_tungstenite::connect_async(ws_url(&self.coordinator))).await {
+        let ws = match timeout(
+            OPEN_TIMEOUT,
+            tokio_tungstenite::connect_async(ws_url(&self.coordinator)),
+        )
+        .await
+        {
             Ok(Ok((ws, _))) => ws,
             Ok(Err(e)) => return Ok(End::Unreachable(e.to_string())),
             Err(_) => return Ok(End::Unreachable("connect timeout".into())),
@@ -261,10 +401,18 @@ impl Agent {
         let reg: Value = loop {
             match timeout(OPEN_TIMEOUT, stream.next()).await {
                 Err(_) => return Ok(End::Unreachable("no registration reply".into())),
-                Ok(None) => return Ok(End::Closed { code: None, registered: false }),
+                Ok(None) => {
+                    return Ok(End::Closed {
+                        code: None,
+                        registered: false,
+                    });
+                }
                 Ok(Some(Err(e))) => return Ok(End::Unreachable(e.to_string())),
                 Ok(Some(Ok(Message::Close(f)))) => {
-                    return Ok(End::Closed { code: f.map(|f| u16::from(f.code)), registered: false });
+                    return Ok(End::Closed {
+                        code: f.map(|f| u16::from(f.code)),
+                        registered: false,
+                    });
                 }
                 Ok(Some(Ok(Message::Text(t)))) => match serde_json::from_str(&t) {
                     Ok(v) => break v,
@@ -274,18 +422,33 @@ impl Agent {
             }
         };
         if let Some(cred) = reg.get("credential").and_then(Value::as_str) {
-            let node_id = reg.get("node_id").and_then(Value::as_str).context("registration missing node_id")?;
+            let node_id = reg
+                .get("node_id")
+                .and_then(Value::as_str)
+                .context("registration missing node_id")?;
             self.state.node_id = Some(node_id.to_owned());
             self.state.credential = Some(cred.to_owned());
             self.state.coordinator = Some(self.coordinator.clone());
             self.save()?;
             self.enrollment_token = None; // spent; only now, so failed connects retry with it
-            say(format!("enrolled as node {node_id}; credential saved to {} (0600)", self.state_path.display()));
+            say(format!(
+                "enrolled as node {node_id}; credential saved to {} (0600)",
+                self.state_path.display()
+            ));
         }
-        let shared: Vec<&str> = caps["models"].as_array().into_iter().flatten().filter_map(|m| m["model_id"].as_str()).collect();
+        let shared: Vec<&str> = caps["models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|m| m["model_id"].as_str())
+            .collect();
         say(format!(
             "online; sharing {}",
-            if shared.is_empty() { "nothing (runtime unhealthy)".to_string() } else { shared.join(", ") }
+            if shared.is_empty() {
+                "nothing (runtime unhealthy)".to_string()
+            } else {
+                shared.join(", ")
+            }
         ));
 
         let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
@@ -296,15 +459,26 @@ impl Agent {
                 }
             }
         });
-        let out = Out { tx, node_id: self.state.node_id.clone() };
+        let out = Out {
+            tx,
+            node_id: self.state.node_id.clone(),
+        };
         let heartbeat = tokio::spawn(heartbeat_loop(out.clone(), self.ollama.clone(), self.heartbeat));
 
         let end = loop {
             match timeout(IDLE_TIMEOUT, stream.next()).await {
                 Err(_) => break End::Unreachable("connection idle; no traffic from coordinator".into()),
-                Ok(None) | Ok(Some(Err(_))) => break End::Closed { code: None, registered: true },
+                Ok(None) | Ok(Some(Err(_))) => {
+                    break End::Closed {
+                        code: None,
+                        registered: true,
+                    };
+                }
                 Ok(Some(Ok(Message::Close(f)))) => {
-                    break End::Closed { code: f.map(|f| u16::from(f.code)), registered: true };
+                    break End::Closed {
+                        code: f.map(|f| u16::from(f.code)),
+                        registered: true,
+                    };
                 }
                 Ok(Some(Ok(Message::Text(t)))) => {
                     if let Ok(msg) = serde_json::from_str::<Value>(&t) {
@@ -332,12 +506,16 @@ impl Agent {
             }
             "job.cancel" => {
                 if let Some(id) = msg["job_id"].as_str()
-                    && let Some(n) = self.cancels.lock().expect("cancels lock").get(id) {
-                        n.notify_one();
-                    }
+                    && let Some(n) = self.cancels.lock().expect("cancels lock").get(id)
+                {
+                    n.notify_one();
+                }
             }
             "model.refresh" => {
-                out.send("node.capabilities", json!({ "capabilities": self.capabilities().await }));
+                out.send(
+                    "node.capabilities",
+                    json!({ "capabilities": self.capabilities().await }),
+                );
                 say("model inventory refreshed");
             }
             "node.sharing" => say(if msg["enabled"].as_bool() == Some(true) {
@@ -353,7 +531,11 @@ impl Agent {
 
 /// First frame: node.auth with a saved credential, else node.enroll. The token is kept in
 /// `token` (not consumed) so a transient connect failure retries with it.
-fn build_hello(state: &State, token: &mut Option<String>, prompt: impl FnOnce() -> Result<String>) -> Result<Value> {
+fn build_hello(
+    state: &State,
+    token: &mut Option<String>,
+    prompt: impl FnOnce() -> Result<String>,
+) -> Result<Value> {
     if let (Some(node_id), Some(credential)) = (&state.node_id, &state.credential) {
         return Ok(json!({ "type": "node.auth", "node_id": node_id, "credential": credential }));
     }
@@ -388,32 +570,51 @@ struct Job {
 
 impl Job {
     async fn run(self, msg: Value) {
-        let Some(job_id) = msg["job_id"].as_str().map(str::to_owned) else { return };
+        let Some(job_id) = msg["job_id"].as_str().map(str::to_owned) else {
+            return;
+        };
         let model = msg["model"].as_str().unwrap_or_default();
         if !self.approved.iter().any(|m| m == model) {
-            self.out.send("job.failed", json!({ "job_id": job_id, "code": "MODEL_NOT_SHARED", "started": false }));
+            self.out.send(
+                "job.failed",
+                json!({ "job_id": job_id, "code": "MODEL_NOT_SHARED", "started": false }),
+            );
             return;
         }
         let cancel = Arc::new(Notify::new());
-        self.cancels.lock().expect("cancels lock").insert(job_id.clone(), cancel.clone());
+        self.cancels
+            .lock()
+            .expect("cancels lock")
+            .insert(job_id.clone(), cancel.clone());
         self.out.send("job.started", json!({ "job_id": job_id }));
 
         let opts = &msg["options"];
         let req = ChatRequest {
             model: model.to_owned(),
             messages: msg["messages"].clone(),
-            max_tokens: opts["max_tokens"].as_f64().filter(|&n| n >= 1.0).map_or(512, |n| n as u64),
+            max_tokens: opts["max_tokens"]
+                .as_f64()
+                .filter(|&n| n >= 1.0)
+                .map_or(512, |n| n as u64),
             temperature: opts["temperature"].as_f64(),
             top_p: opts["top_p"].as_f64(),
         };
-        let deadline = msg["deadline_seconds"].as_f64().filter(|&d| d > 0.0 && d.is_finite()).unwrap_or(180.0);
+        let deadline = msg["deadline_seconds"]
+            .as_f64()
+            .filter(|&d| d > 0.0 && d.is_finite())
+            .unwrap_or(180.0);
         let start = Instant::now();
         let mut seq = 0u64;
         let on_token = |text: &str| {
             seq += 1;
-            self.out.send("job.token", json!({ "job_id": job_id, "text": text, "seq": seq }));
+            self.out
+                .send("job.token", json!({ "job_id": job_id, "text": text, "seq": seq }));
         };
-        let res = timeout(Duration::from_secs_f64(deadline), self.ollama.chat(req, on_token, &cancel)).await;
+        let res = timeout(
+            Duration::from_secs_f64(deadline),
+            self.ollama.chat(req, on_token, &cancel),
+        )
+        .await;
         let short_id = truncate(&job_id, 8);
         match res {
             Err(_) => {
@@ -432,11 +633,14 @@ impl Job {
             }
             Ok(r) => {
                 let err = r.error.unwrap_or_default();
-                self.out.send("job.failed", json!({
-                    "job_id": job_id, "code": if r.cancelled { "CANCELLED" } else { "RUNTIME_ERROR" },
-                    "cancelled": r.cancelled, "started": true, "worker_elapsed_ms": r.worker_elapsed_ms,
-                    "message": truncate(&err, 200),
-                }));
+                self.out.send(
+                    "job.failed",
+                    json!({
+                        "job_id": job_id, "code": if r.cancelled { "CANCELLED" } else { "RUNTIME_ERROR" },
+                        "cancelled": r.cancelled, "started": true, "worker_elapsed_ms": r.worker_elapsed_ms,
+                        "message": truncate(&err, 200),
+                    }),
+                );
                 say(format!("job {short_id} ended: {}", truncate(&err, 80)));
             }
         }
@@ -445,9 +649,7 @@ impl Job {
 }
 
 async fn build_agent(a: Args) -> Result<Agent> {
-    if !is_loopback_url(&a.ollama) {
-        bail!("Refusing a non-loopback Ollama URL: the runtime must stay on this machine.");
-    }
+    let scope = runtime_scope(&a.ollama, allow_remote_from(a.allow_remote_runtime))?;
     let state_dir = match &a.state_dir {
         Some(d) => expand_home(d)?,
         None => expand_home("~/.opencomputemesh")?,
@@ -467,13 +669,16 @@ async fn build_agent(a: Args) -> Result<Agent> {
         coordinator,
         state_path,
         state,
+        runtime_scope: scope,
         ollama: Ollama::new(&a.ollama)?,
         models_flag: a.models,
         name: a.name,
         max_jobs: a.max_jobs,
         heartbeat: Duration::from_secs(a.heartbeat),
         host: Host::detect().await,
-        enrollment_token: std::env::var("OCM_ENROLLMENT_TOKEN").ok().filter(|t| !t.trim().is_empty()),
+        enrollment_token: std::env::var("OCM_ENROLLMENT_TOKEN")
+            .ok()
+            .filter(|t| !t.trim().is_empty()),
         cancels: Cancels::default(),
     })
 }
@@ -525,7 +730,12 @@ mod tests {
 
     #[test]
     fn loopback_only() {
-        for ok in ["http://127.0.0.1:11434", "http://localhost:11434/", "http://[::1]:11434", "https://localhost"] {
+        for ok in [
+            "http://127.0.0.1:11434",
+            "http://localhost:11434/",
+            "http://[::1]:11434",
+            "https://localhost",
+        ] {
             assert!(is_loopback_url(ok), "{ok}");
         }
         for bad in [
@@ -533,6 +743,8 @@ mod tests {
             "http://example.com",
             "http://127.0.0.1.evil.com",
             "http://localhost@evil.com",
+            "http://user:pw@localhost:11434",
+            "http://127.0.0.1@evil.com",
             "file:///etc/passwd",
             "127.0.0.1:11434",
         ] {
@@ -541,8 +753,27 @@ mod tests {
     }
 
     #[test]
+    fn scope_requires_an_explicit_opt_in() {
+        assert_eq!(runtime_scope("http://127.0.0.1:11434", false).unwrap(), "local");
+        assert_eq!(runtime_scope("http://[::1]:11434", true).unwrap(), "local");
+        assert!(runtime_scope("http://192.168.1.50:11434", false).is_err());
+        assert_eq!(
+            runtime_scope("http://192.168.1.50:11434", true).unwrap(),
+            "remote"
+        );
+        // Opted in still only permits a plain URL: no embedded credentials, no other scheme.
+        assert!(runtime_scope("http://127.0.0.1@evil.com:11434", true).is_err());
+        assert!(runtime_scope("http://u:p@box:11434", true).is_err());
+        assert!(runtime_scope("ftp://box:21", true).is_err());
+        assert!(runtime_scope("not a url", true).is_err());
+    }
+
+    #[test]
     fn ws_url_mapping() {
-        assert_eq!(ws_url("https://x.trycloudflare.com"), "wss://x.trycloudflare.com/ws/node");
+        assert_eq!(
+            ws_url("https://x.trycloudflare.com"),
+            "wss://x.trycloudflare.com/ws/node"
+        );
         assert_eq!(ws_url("http://localhost:8031"), "ws://localhost:8031/ws/node");
     }
 
@@ -562,7 +793,10 @@ mod tests {
         assert!(build_hello(&state, &mut None, || bail!("no tty")).is_err());
         state.node_id = Some("n".into());
         state.credential = Some("c".into());
-        assert_eq!(build_hello(&state, &mut token, || panic!()).unwrap()["type"], "node.auth");
+        assert_eq!(
+            build_hello(&state, &mut token, || panic!()).unwrap()["type"],
+            "node.auth"
+        );
     }
 
     #[test]

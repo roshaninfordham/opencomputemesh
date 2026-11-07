@@ -23,13 +23,22 @@ impl Host {
         let mut sys = System::new();
         sys.refresh_cpu_all();
         sys.refresh_memory();
-        let cpu_model = sys.cpus().first().map(|c| c.brand().trim().to_owned()).filter(|b| !b.is_empty());
+        let cpu_model = sys
+            .cpus()
+            .first()
+            .map(|c| c.brand().trim().to_owned())
+            .filter(|b| !b.is_empty());
         let platform = match (System::name(), System::kernel_version()) {
             (Some(n), Some(k)) => Some(format!("{n} {k}")),
             (n, k) => n.or(k),
         };
         Host {
-            hostname: System::host_name().unwrap_or_else(|| "node".into()).split('.').next().unwrap_or("node").to_owned(),
+            hostname: System::host_name()
+                .unwrap_or_else(|| "node".into())
+                .split('.')
+                .next()
+                .unwrap_or("node")
+                .to_owned(),
             platform: platform.map(|p| truncate(&p, 64)),
             architecture: truncate(&System::cpu_arch(), 32),
             cpu_model: cpu_model.map(|c| truncate(&c, 128)),
@@ -47,20 +56,32 @@ pub fn memory_available_bytes() -> u64 {
 }
 
 async fn run(cmd: &str, args: &[&str]) -> Option<String> {
-    let child = tokio::process::Command::new(cmd).args(args).kill_on_drop(true).output();
-    let out = tokio::time::timeout(Duration::from_secs(5), child).await.ok()?.ok()?;
+    let child = tokio::process::Command::new(cmd)
+        .args(args)
+        .kill_on_drop(true)
+        .output();
+    let out = tokio::time::timeout(Duration::from_secs(5), child)
+        .await
+        .ok()?
+        .ok()?;
     let s = String::from_utf8_lossy(&out.stdout).trim().to_owned();
     (out.status.success() && !s.is_empty()).then_some(s)
 }
 
 async fn gpu_inventory() -> Vec<Value> {
-    if let Some(out) = run("nvidia-smi", &["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"]).await {
+    if let Some(out) = run(
+        "nvidia-smi",
+        &["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+    )
+    .await
+    {
         return parse_nvidia_smi(&out);
     }
     if cfg!(target_os = "macos")
-        && let Some(out) = run("system_profiler", &["SPDisplaysDataType", "-json"]).await {
-            return parse_system_profiler(&out);
-        }
+        && let Some(out) = run("system_profiler", &["SPDisplaysDataType", "-json"]).await
+    {
+        return parse_system_profiler(&out);
+    }
     Vec::new()
 }
 
@@ -69,14 +90,20 @@ fn parse_nvidia_smi(out: &str) -> Vec<Value> {
         .take(16)
         .map(|line| {
             let (name, mem) = line.split_once(',').unwrap_or((line, ""));
-            let mem = mem.trim().parse::<f64>().ok().map(|mib| (mib as u64) * 1024 * 1024);
+            let mem = mem
+                .trim()
+                .parse::<f64>()
+                .ok()
+                .map(|mib| (mib as u64) * 1024 * 1024);
             json!({ "name": truncate(name.trim(), 128), "memory_total_bytes": mem, "source": "nvidia-smi" })
         })
         .collect()
 }
 
 fn parse_system_profiler(out: &str) -> Vec<Value> {
-    let Ok(v) = serde_json::from_str::<Value>(out) else { return Vec::new() };
+    let Ok(v) = serde_json::from_str::<Value>(out) else {
+        return Vec::new();
+    };
     v.get("SPDisplaysDataType")
         .and_then(Value::as_array)
         .map(|gpus| {
