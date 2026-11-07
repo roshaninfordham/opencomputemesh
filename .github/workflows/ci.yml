@@ -94,11 +94,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
-        with:
-          # cargo-fuzz links the sanitizer build against musl on Linux.
-          targets: x86_64-unknown-linux-musl
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-fuzz
-      - run: cargo fuzz run decode_frame -- -max_total_time=60 -max_len=65536
-      - run: cargo fuzz run parse_config -- -max_total_time=60 -max_len=65536
+      # cargo-fuzz defaults to a musl target on Linux, whose static libc ASAN
+      # refuses to link against; name the GNU target so the sanitizer build works.
+      - run: cargo fuzz run --target x86_64-unknown-linux-gnu decode_frame -- -max_total_time=60 -max_len=65536
+      - run: cargo fuzz run --target x86_64-unknown-linux-gnu parse_config -- -max_total_time=60 -max_len=65536
