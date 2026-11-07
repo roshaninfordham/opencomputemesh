@@ -8,3 +8,4 @@ Every dependency must earn its place. Default features are disabled unless noted
 | ed25519-dalek | ocm-proto | Node identity and result-frame signatures (audited, pure Rust) |
 | getrandom | ocm-proto | OS randomness for generating node keys, without pulling a full RNG stack |
 | proptest (dev) | ocm-proto, ocm-sched | Property tests for protocol and scheduler invariants |
+| libfuzzer-sys (fuzz only) | fuzz/ | Coverage-guided fuzzing of the frame decoder in CI |
