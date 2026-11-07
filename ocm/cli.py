@@ -15,6 +15,9 @@ def main(argv=None) -> None:
     sub.add_parser("serve", help="Run the coordinator (single process)")
     sub.add_parser("join-code", help="Print the network join code")
     sub.add_parser("check-ledger", help="Verify ledger invariants")
+    ex = sub.add_parser("export-decisions", help="Dump labelled routing decisions as JSONL (the training dataset)")
+    ex.add_argument("--limit", type=int, default=1000)
+    ex.add_argument("--since", default=None, help="ISO timestamp floor on job creation")
     a = p.parse_args(argv)
     s = Settings.from_env()
     if a.cmd == "join-code":
@@ -32,6 +35,14 @@ def main(argv=None) -> None:
         report = ledger.consistency_report(connect(s.database_path))
         print(json.dumps(report, indent=2))
         raise SystemExit(0 if report["ok"] else 1)
+    elif a.cmd == "export-decisions":
+        import json
+        from . import decisions
+        from .db import connect
+        if not Path(s.database_path).is_file():  # connect() would create an empty database and export nothing
+            raise SystemExit(f"No database at OCM_DATABASE_PATH={s.database_path}; check the coordinator's settings.")
+        for row in decisions.export_decisions(connect(s.database_path), limit=a.limit, since=a.since):
+            print(json.dumps(row))
     else:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
         init_sentry()  # no-op unless SENTRY_DSN is set

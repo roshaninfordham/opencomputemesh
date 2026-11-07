@@ -32,6 +32,9 @@ built web bundle. See `docs/RELEASING.md`.
   plus `attested: false` on receipts.
 - `ocm-agent`: reports NVIDIA compute capability and driver version alongside VRAM in the node
   inventory, so routing can prefer the hardware a model needs before dispatch, not during.
+- `ocm export-decisions`: dumps terminal jobs as labelled JSONL rows — model, route reason, node and
+  node runtime tier, status, failure code, tokens, timings. No prompt or output text exists in the
+  rows, by construction. This is the dataset the house decision model trains on.
 
 ### Changed
 - `tools/tinfoil-gateway`: a non-loopback bind now requires `GATEWAY_TOKEN` and the process exits
