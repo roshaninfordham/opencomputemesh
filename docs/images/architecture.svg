@@ -104,7 +104,7 @@
 
   <text x="792" y="214" class="t lbl">one RuntimeAdapter interface</text>
 
-  <rect x="792" y="222" width="208" height="44" rx="8" class="chip"/>
+  <rect x="792" y="222" width="208" height="44" rx="8" fill="#f4f0fd" stroke="#6b46c1" stroke-width="1.5"/>
   <text x="806" y="241" class="t b" font-weight="600" font-size="12">Ollama</text>
   <text x="806" y="257" class="t s" font-size="10.5">default &#183; loopback only</text>
 
@@ -112,11 +112,11 @@
   <text x="1030" y="241" class="t" font-weight="600" font-size="12" fill="#4c2f96">SIE &#183; any OpenAI-compatible</text>
   <text x="1030" y="257" class="t s" font-size="10.5">vLLM, LM Studio, llama.cpp, TGI</text>
 
-  <rect x="792" y="274" width="208" height="44" rx="8" class="chip"/>
+  <rect x="792" y="274" width="208" height="44" rx="8" fill="#f4f0fd" stroke="#6b46c1" stroke-width="1.5"/>
   <text x="806" y="293" class="t b" font-weight="600" font-size="12">Gemini API</text>
   <text x="806" y="309" class="t s" font-size="10.5">key stays on the node</text>
 
-  <rect x="1016" y="274" width="208" height="44" rx="8" class="chip" stroke-dasharray="5 4"/>
+  <rect x="1016" y="274" width="208" height="44" rx="8" fill="#f4f0fd" stroke="#6b46c1" stroke-width="1.5" stroke-dasharray="5 4"/>
   <text x="1030" y="293" class="t b" font-weight="600" font-size="12">Remote runtime</text>
   <text x="1030" y="309" class="t s" font-size="10.5">opt-in &#183; attested: false</text>
 
@@ -138,11 +138,11 @@
     <text x="60" y="533" class="t k" fill="#56645f">HOW</text>
     <text x="60" y="551" class="t m">ocm-agent --runtime openai</text>
     <text x="60" y="574" class="t k" fill="#56645f">VERIFIED</text>
-    <text x="60" y="592" class="t s">Mock-transport tests, plus a live run through</text>
-    <text x="60" y="609" class="t s">the real coordinator, agent and ledger.</text>
+    <text x="60" y="592" class="t s">Mock-transport tests, plus a live run against an</text>
+    <text x="60" y="609" class="t s">OpenAI-compatible server through the real</text>
     <text x="60" y="631" class="t k" fill="#a35a14">NOT YET</text>
-    <text x="60" y="647" class="t s">Chat only: no embeddings or rerank. Model ids</text>
-    <text x="60" y="663" class="t s">carry no digest, so no digest-matched claims.</text>
+    <text x="60" y="647" class="t s">coordinator, agent and ledger. Chat only: no</text>
+    <text x="60" y="663" class="t s">embeddings or rerank, and no digest on model ids.</text>
 
     <!-- Tinfoil -->
     <rect x="448" y="412" width="384" height="272" rx="12" fill="#ffffff" stroke="#f0e0cc" stroke-width="1.5"/>
