@@ -5,6 +5,8 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-07
+
 ### Changed
 - Diagrams redrawn around role rather than vendor: colour now marks core, runtime, attested tier,
   memory and data, and each of SIE, Tinfoil and Cognee states what it is for, how it is reached,
@@ -17,6 +19,8 @@ Semantic Versioning.
 - A form feed in a configuration file made the lexer emit empty tokens at one offset for ever, so
   `ocm -t` ran out of memory instead of reporting an error. Found by the fuzz target the moment CI
   could run it.
+- The fuzz job in CI builds on nightly with the GNU target now, so the frame decoder and the config
+  parser are fuzzed on every push instead of failing before they start.
 
 ## [0.1.2] - 2026-11-07
 

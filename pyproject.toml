@@ -1,6 +1,6 @@
 [project]
 name = "opencomputemesh"
-version = "0.1.2"
+version = "0.1.3"
 description = "Share compute. Run models. See every token."
 readme = "README.md"
 license = "Apache-2.0"

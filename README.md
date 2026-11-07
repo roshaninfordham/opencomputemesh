@@ -38,11 +38,11 @@ Nothing is code-signed yet. See [docs/RELEASING.md](docs/RELEASING.md).
 does not contain the web app, so fetch both assets from [the latest release](https://github.com/roshaninfordham/opencomputemesh/releases).
 
 ```bash
-BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.2
-curl -LO $BASE/opencomputemesh-0.1.2-py3-none-any.whl
-curl -LO $BASE/opencomputemesh-web-0.1.2.zip
-unzip -q opencomputemesh-web-0.1.2.zip -d web/dist
-uv tool install ./opencomputemesh-0.1.2-py3-none-any.whl
+BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.3
+curl -LO $BASE/opencomputemesh-0.1.3-py3-none-any.whl
+curl -LO $BASE/opencomputemesh-web-0.1.3.zip
+unzip -q opencomputemesh-web-0.1.3.zip -d web/dist
+uv tool install ./opencomputemesh-0.1.3-py3-none-any.whl
 OCM_WEB_DIST=./web/dist ocm serve
 ```
 
@@ -53,12 +53,12 @@ token under Nodes in the web app, then run the binary for your OS. It dials out 
 macOS builds are unsigned, so clear the quarantine bit first.
 
 ```bash
-BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.2
-curl -LO $BASE/ocm-node-0.1.2-aarch64-apple-darwin
-chmod +x ocm-node-0.1.2-aarch64-apple-darwin
-xattr -d com.apple.quarantine ocm-node-0.1.2-aarch64-apple-darwin
+BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.3
+curl -LO $BASE/ocm-node-0.1.3-aarch64-apple-darwin
+chmod +x ocm-node-0.1.3-aarch64-apple-darwin
+xattr -d com.apple.quarantine ocm-node-0.1.3-aarch64-apple-darwin
 ollama pull qwen2.5:1.5b
-./ocm-node-0.1.2-aarch64-apple-darwin \
+./ocm-node-0.1.3-aarch64-apple-darwin \
   --coordinator https://your-coordinator \
   --models qwen2.5:1.5b --name my-laptop
 ```

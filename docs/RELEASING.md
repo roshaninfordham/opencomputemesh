@@ -7,8 +7,8 @@ and a Tauri desktop build cannot either.
 ## Cut a release
 
 ```bash
-git tag -a v0.1.2 -m "v0.1.2"
-git push origin v0.1.2
+git tag -a v0.1.3 -m "v0.1.3"
+git push origin v0.1.3
 ```
 
 The tag is the release. Pushing it runs four jobs, then publishes them together with
@@ -18,23 +18,23 @@ moving it, run the workflow manually with that tag as input
 
 ## If you get stuck
 
-**`fatal: tag 'v0.1.2' already exists`** — you do not need to create it again; that tag is
+**`fatal: tag 'v0.1.3' already exists`** — you do not need to create it again; that tag is
 already on the commit you want. Skip straight to the push. Check first:
 
 ```bash
-git rev-list -n1 v0.1.2        # the commit the tag points at
+git rev-list -n1 v0.1.3        # the commit the tag points at
 git rev-parse --short main     # the commit you mean to release
 ```
 
-If they differ, move the tag: `git tag -d v0.1.2 && git tag -a v0.1.2 -m "v0.1.2" <commit>`.
-If they match, `git push origin v0.1.2` is the entire remaining step.
+If they differ, move the tag: `git tag -d v0.1.3 && git tag -a v0.1.3 -m "v0.1.3" <commit>`.
+If they match, `git push origin v0.1.3` is the entire remaining step.
 
 **`Username for 'https://github.com'`** — git has no credential helper, so it is asking you
 every time. Log in once with the GitHub CLI and it configures git for you:
 
 ```bash
 gh auth login          # GitHub.com -> HTTPS -> yes to "Authenticate Git" -> browser
-git push origin v0.1.2
+git push origin v0.1.3
 ```
 
 No GitHub CLI? Either `gh auth setup-git` after installing it, or use SSH
@@ -43,7 +43,7 @@ No GitHub CLI? Either `gh auth setup-git` after installing it, or use SSH
 
 **Nothing happens after the push** — confirm the tag reached GitHub with
 `git ls-remote --tags origin`, then watch the run with `gh run watch`. Tags are not
-branches: `git push` alone never sends them, and a pushed branch named `v0.1.2` would not
+branches: `git push` alone never sends them, and a pushed branch named `v0.1.3` would not
 trigger this workflow.
 
 ## What a release contains
@@ -67,7 +67,7 @@ container registry, not GitHub Releases) and the desktop shell (not built yet �
 **Coordinator (any OS, needs Python 3.12+):**
 
 ```bash
-uv tool install opencomputemesh==0.1.2     # or: pipx install opencomputemesh==0.1.2
+uv tool install opencomputemesh==0.1.3     # or: pipx install opencomputemesh==0.1.3
 ocm serve
 ```
 
@@ -79,8 +79,8 @@ unzipped). Without it, the API works and the UI answers 404.
 
 ```bash
 # macOS / Linux
-chmod +x ocm-node-0.1.2-aarch64-apple-darwin
-./ocm-node-0.1.2-aarch64-apple-darwin --help
+chmod +x ocm-node-0.1.3-aarch64-apple-darwin
+./ocm-node-0.1.3-aarch64-apple-darwin --help
 ```
 
 The Windows `.exe` runs directly. It still needs a model runtime on the same machine
@@ -101,11 +101,13 @@ Do not describe these as one-click installers. They are checksummed downloads.
 
 ## Version to bump before tagging
 
-A version lives in three places and all three must agree, or `--locked` fails in CI:
+A version lives in five places and all five must agree, or a `--locked` install fails in CI:
 
 1. `pyproject.toml` → `[project].version`
-2. `crates/ocm-node/Cargo.toml` → `[package].version`
-3. `crates/ocm-node/Cargo.lock` → the `ocm-node` package entry
+2. `uv.lock` → the `opencomputemesh` package entry (`uv lock` updates it)
+3. `crates/ocm-node/Cargo.toml` → `[package].version`
+4. `crates/ocm-node/Cargo.lock` → the `ocm-node` package entry
+5. `web/package.json` and `web/package-lock.json` → both version fields
 
 Also add the `CHANGELOG.md` section named exactly `## [<version>] - <date>`.
 

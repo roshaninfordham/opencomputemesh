@@ -54,19 +54,19 @@
   <h2>Install in three steps</h2>
   <div class="grid">
     <div class="card"><h3>1. Host</h3><p>One machine with Python 3.12+ and <code>uv</code>. The wheel excludes the web app, so fetch both assets.</p>
-      <pre><code>BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.2
-curl -LO $BASE/opencomputemesh-0.1.2-py3-none-any.whl
-curl -LO $BASE/opencomputemesh-web-0.1.2.zip
-unzip -q opencomputemesh-web-0.1.2.zip -d web/dist
-uv tool install ./opencomputemesh-0.1.2-py3-none-any.whl
+      <pre><code>BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.3
+curl -LO $BASE/opencomputemesh-0.1.3-py3-none-any.whl
+curl -LO $BASE/opencomputemesh-web-0.1.3.zip
+unzip -q opencomputemesh-web-0.1.3.zip -d web/dist
+uv tool install ./opencomputemesh-0.1.3-py3-none-any.whl
 OCM_WEB_DIST=./web/dist ocm serve</code></pre></div>
     <div class="card"><h3>2. Share models</h3><p>Pull a model with Ollama, create an enrollment token under Nodes, run the binary for your OS. It dials out and opens no ports.</p>
-      <pre><code>BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.2
-curl -LO $BASE/ocm-node-0.1.2-aarch64-apple-darwin
-chmod +x ocm-node-0.1.2-aarch64-apple-darwin
-xattr -d com.apple.quarantine ocm-node-0.1.2-aarch64-apple-darwin
+      <pre><code>BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.3
+curl -LO $BASE/ocm-node-0.1.3-aarch64-apple-darwin
+chmod +x ocm-node-0.1.3-aarch64-apple-darwin
+xattr -d com.apple.quarantine ocm-node-0.1.3-aarch64-apple-darwin
 ollama pull qwen2.5:1.5b
-./ocm-node-0.1.2-aarch64-apple-darwin --coordinator https://your-coordinator \
+./ocm-node-0.1.3-aarch64-apple-darwin --coordinator https://your-coordinator \
   --models qwen2.5:1.5b --name my-laptop</code></pre></div>
     <div class="card"><h3>3. Join</h3><p>Open <code>/join/&lt;code&gt;</code> on any device. No install, no account, and joining shares no compute.</p>
       <p>Linux uses the musl binary, Windows the <code>.exe</code>. Already running SIE, vLLM or LM Studio? <code>ocm-agent --runtime openai</code> shares it with no Ollama.</p></div>

@@ -1,6 +1,6 @@
 name: Release
 
-# Cut a release by pushing a tag: `git tag -a v0.1.2 -m "..." && git push origin v0.1.2`.
+# Cut a release by pushing a tag: `git tag -a v0.1.3 -m "..." && git push origin v0.1.3`.
 # Everything below then runs on native runners, which is the only way to produce
 # real macOS and Windows artifacts: neither can be cross-compiled from Linux.
 on:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to publish, e.g. v0.1.2"
+        description: "Existing tag to publish, e.g. v0.1.3"
         required: true
 
 permissions:
