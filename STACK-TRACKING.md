@@ -124,7 +124,7 @@ Spec: `docs/superpowers/specs/2026-11-07-confidential-tier-tinfoil.md`.
 | P | Work | State |
 |---|---|---|
 | P0 | `backend tinfoil` + mandatory `repo` in `ocm-config` | **done** |
-| P1 | Attested backend: verify, EHBP byte forwarding, enclave allowlist | not started |
+| P1 | Attested backend: verify, EHBP byte forwarding, enclave allowlist | **done** (`tools/tinfoil-gateway`) |
 | P2 | Blind metering: reserve-then-reconcile, trailer settlement | not started |
 | P3 | Receipt `execution` block, `community` labelling | not started |
 | P4 | Coordinator as a Tinfoil Container | deferred, blockers documented |
@@ -142,6 +142,15 @@ Spec: `docs/superpowers/specs/2026-11-07-confidential-tier-tinfoil.md`.
 - `tools/tinfoil-probe` (official Rust SDK) verifies and prints:
   `verified: true`, `enclave_fingerprint = code_fingerprint = f5bcc220a94d5c34…`
   for `tinfoilsh/confidential-model-router`.
+- `tools/tinfoil-gateway` (P1), live smoke run: 2 unit tests pass, clippy clean;
+  `/healthz` returns `verified: true` with the pinned host and fingerprint; a real
+  completion returned `"gateway reachable"` (73 + 21 tokens); a malformed JSON body
+  was rejected by the **upstream** (`invalid_json`), proving the gateway never
+  parses bodies; `X-Tinfoil-Enclave-Url: https://evil.example` was refused with
+  `400`; the key appeared in zero log lines.
+- Upstream usage header reports `cost_usd` alongside token counts
+  (`cost_usd=0.00002355` for a 73+21 request). This is the honest settlement basis
+  for the tier, and it is recorded in the spec.
 
 ## Gate
 

@@ -14,6 +14,8 @@ Semantic Versioning.
   attestation without naming what it verifies against is rejected.
 - Confidential tier (v0.3) spec: a coordinator that routes and bills inference it cannot read.
 - `tools/tinfoil-probe`: reproduces enclave attestation verification and prints the measurement.
+- `tools/tinfoil-gateway`: P1 attested gateway that pins one verified enclave and forwards opaque
+  bodies, refusing any other origin and any unverified start.
 
 ## [0.1.0] - 2026-10-11
 

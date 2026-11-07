@@ -129,6 +129,10 @@ Budget enforcement has a real subtlety that must not be hand-waved:
   must *reserve* `max_tokens` of budget up front and reconcile at the end. A client
   that disconnects mid-stream must still be charged for what the enclave produced.
 - `tokens/sec` and `finish_reason` are likewise upstream-reported, never inferred.
+- The usage header also carries `cost_usd`, the provider's own measured cost for the
+  request. Settlement for this tier should reconcile against that number rather than
+  inventing a tariff: we can charge a margin, but we should not fabricate a price
+  for a cost we did not incur and cannot observe.
 
 ## 7. Deploying OCM itself as a Tinfoil Container (deferred, deliberately)
 
@@ -158,6 +162,28 @@ Revisit once the Rust coordinator serves `/v1` end to end.
 | P2 | Blind metering: reserve then reconcile, per-key budget under encryption | Over-budget key stops mid-stream at the reserve, settles on trailer; disconnect still bills |
 | P3 | Receipt `execution` block, client-verified flag | Receipt shows fingerprints; community receipts say `community` explicitly |
 | P4 | Coordinator as a Tinfoil Container | Users verify the coordinator's own measurement |
+
+### P1 status: shipped as `tools/tinfoil-gateway`
+
+Standalone, because the coordinator that will eventually host it is still Python.
+Verified against the live service:
+
+- Startup fails closed: the gateway verifies the enclave and obtains the
+  attestation-pinned client before it binds a socket.
+- A real completion returned through the gateway (`gpt-oss-120b`, 73 prompt + 21
+  completion tokens).
+- A deliberately malformed JSON body was rejected **by the upstream** with
+  `invalid_json`, which is the observable proof that the gateway forwards bytes it
+  never parses. With an EHBP client those same bytes are ciphertext.
+- A request naming `https://evil.example` was refused locally with `400`; the
+  pinned origin is compared for equality, so a lookalike host cannot match.
+- The upstream key appeared in zero log lines, and a client `Authorization` header
+  is dropped rather than forwarded.
+
+Deliberately not done yet: no `/attestation` endpoint (needed only by the
+JavaScript, Python and Swift clients), no trailer forwarding (so streaming usage
+is not yet billable), and no caller authentication — which is why it binds loopback
+and must not be exposed publicly in this form.
 
 ## 9. Failure modes and responses
 

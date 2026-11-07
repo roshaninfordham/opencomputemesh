@@ -1,0 +1,17 @@
+[package]
+name = "ocm-tinfoil-gateway"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "Apache-2.0"
+
+# Standalone while there is no Rust coordinator to host this. Excluded from the
+# workspace so the runtime dependency set stays deterministic; see README.md.
+[workspace]
+
+[dependencies]
+tinfoil = { git = "https://github.com/tinfoilsh/tinfoil-rs" }
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+reqwest = { version = "0.13.3", default-features = false, features = ["json", "stream"] }
+serde_json = "1"
