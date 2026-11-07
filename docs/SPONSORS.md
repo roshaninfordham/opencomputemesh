@@ -8,7 +8,7 @@ OpenComputeMesh uses three sponsor technologies from AI Engineer NYC 2026 (MLH):
 | Tiger Data | `ocm/timeseries.py`, `ocm/app.py`, `web/src/pages.tsx` | `uv sync --extra tiger`, `OCM_TIMESCALE_URL` | 4 tests against a real local TimescaleDB 2.30.2 (PostgreSQL 17). Not run against Tiger Cloud. |
 | Sentry | `ocm/observability.py`, `ocm/cli.py` | `uv sync --extra sentry`, `SENTRY_DSN` | 5 tests, one through the real `sentry-sdk` with an in-memory transport. Not delivered to a live project (no DSN). |
 
-Test counts are from `uv run pytest -q` at the v0.1.1 release: 97 passed and 3 skipped in a clean checkout, because `psycopg`, `sentry_sdk` and a live Ollama are absent there. With both extras installed, a reachable TimescaleDB and Ollama running, those three run too.
+Test counts are from `uv run pytest -q` at the v0.1.2 release: 97 passed and 3 skipped in a clean checkout, because `psycopg`, `sentry_sdk` and a live Ollama are absent there. With both extras installed, a reachable TimescaleDB and Ollama running, those three run too.
 
 ## Gemini API
 

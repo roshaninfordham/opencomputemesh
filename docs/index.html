@@ -60,18 +60,18 @@
   <p class="lead">Two downloads and a browser tab. Hosting a network takes Python; contributing compute takes one binary and Ollama; sending prompts takes nothing.</p>
   <div class="sponsors">
     <div class="card"><h3>1. Host a network</h3><p>One machine, Python 3.12+ and <code>uv</code>. The wheel does not contain the web app, so unzip the bundle where the coordinator serves it from.</p>
-      <pre><code>curl -LO .../opencomputemesh-0.1.1-py3-none-any.whl
-curl -LO .../opencomputemesh-web-0.1.1.zip
-unzip opencomputemesh-web-0.1.1.zip -d web/dist
-uv tool install ./opencomputemesh-0.1.1-py3-none-any.whl
+      <pre><code>curl -LO .../opencomputemesh-0.1.2-py3-none-any.whl
+curl -LO .../opencomputemesh-web-0.1.2.zip
+unzip opencomputemesh-web-0.1.2.zip -d web/dist
+uv tool install ./opencomputemesh-0.1.2-py3-none-any.whl
 OCM_WEB_DIST=./web/dist ocm serve</code></pre>
       <p class="status">Prints <code>Join path: /join/&lt;code&gt;</code>. Binds 127.0.0.1:8000 unless you set <code>OCM_HOST</code>.</p></div>
     <div class="card"><h3>2. Share your models</h3><p>Install Ollama, pull a model, and create an enrollment token in the web app under Nodes. Then run the binary for your OS. It dials out and opens no ports.</p>
       <pre><code># macOS, Apple silicon (unsigned: clear quarantine)
-chmod +x ocm-node-0.1.1-aarch64-apple-darwin
-xattr -d com.apple.quarantine ocm-node-0.1.1-aarch64-apple-darwin
+chmod +x ocm-node-0.1.2-aarch64-apple-darwin
+xattr -d com.apple.quarantine ocm-node-0.1.2-aarch64-apple-darwin
 ollama pull qwen2.5:1.5b
-./ocm-node-0.1.1-aarch64-apple-darwin \
+./ocm-node-0.1.2-aarch64-apple-darwin \
   --coordinator https://your-coordinator \
   --models qwen2.5:1.5b --name my-laptop</code></pre>
       <p class="status">Linux uses the musl binary, Windows the <code>.exe</code>, with the same flags.</p></div>

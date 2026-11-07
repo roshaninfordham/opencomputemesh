@@ -5,6 +5,10 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.2] - 2026-11-07
+
 ### Added
 - `ocm-agent --runtime openai`: one adapter for every server that speaks the OpenAI chat-completions
   protocol (SIE, vLLM, LM Studio, llama.cpp, TGI), sharing its models through the mesh unchanged. The
@@ -20,7 +24,7 @@ Semantic Versioning.
 
 ### Changed
 - `web/tsconfig.tsbuildinfo` is no longer tracked, so `npm run build` leaves the tree clean.
-- Documentation test counts now match the release checkout (83 Python, 61 Rust) instead of the
+- Documentation test counts now match the release checkout (97 Python, 61 Rust) instead of the
   older 67/9 figures.
 
 ## [0.1.1] - 2026-11-07

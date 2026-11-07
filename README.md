@@ -41,7 +41,7 @@ There are two things to install and one of them is a browser tab.
 | Share your own models | One `ocm-node` binary for your OS | [Ollama](https://ollama.com) with at least one model pulled |
 | Send prompts | Nothing | A browser |
 
-Everything is on the [v0.1.1 release](https://github.com/roshaninfordham/opencomputemesh/releases/tag/v0.1.1). Check `SHA256SUMS.txt` before running a download.
+Everything is on the [v0.1.2 release](https://github.com/roshaninfordham/opencomputemesh/releases/tag/v0.1.2). Check `SHA256SUMS.txt` before running a download.
 
 ### 1. Host a network (one machine, any OS)
 
@@ -49,14 +49,14 @@ Any laptop, spare desktop or VPS that runs Python 3.12+. The wheel does not cont
 put the released bundle where the coordinator serves it from:
 
 ```bash
-curl -LO https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.1/opencomputemesh-0.1.1-py3-none-any.whl
-curl -LO https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.1/opencomputemesh-web-0.1.1.zip
-unzip opencomputemesh-web-0.1.1.zip -d web/dist
-uv tool install ./opencomputemesh-0.1.1-py3-none-any.whl
+curl -LO https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.2/opencomputemesh-0.1.2-py3-none-any.whl
+curl -LO https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.2/opencomputemesh-web-0.1.2.zip
+unzip opencomputemesh-web-0.1.2.zip -d web/dist
+uv tool install ./opencomputemesh-0.1.2-py3-none-any.whl
 OCM_WEB_DIST=./web/dist ocm serve
 ```
 
-On Windows use `curl.exe` (or download both files in a browser) and `Expand-Archive -Path opencomputemesh-web-0.1.1.zip -DestinationPath web\dist`.
+On Windows use `curl.exe` (or download both files in a browser) and `Expand-Archive -Path opencomputemesh-web-0.1.2.zip -DestinationPath web\dist`.
 
 `ocm serve` prints `Join path: /join/<code>`; `ocm join-code` prints it again at any time. It binds
 `127.0.0.1:8000` by default, so set `OCM_HOST=0.0.0.0` or put a tunnel in front of it before anyone
@@ -73,18 +73,18 @@ compute**), then run the binary for your platform. The agent dials out and opens
 
 | OS | Download |
 |---|---|
-| macOS, Apple silicon | `ocm-node-0.1.1-aarch64-apple-darwin` |
-| macOS, Intel | `ocm-node-0.1.1-x86_64-apple-darwin` |
-| Windows x64 | `ocm-node-0.1.1-x86_64-pc-windows-msvc.exe` |
-| Linux x64 (static) | `ocm-node-0.1.1-x86_64-unknown-linux-musl` |
+| macOS, Apple silicon | `ocm-node-0.1.2-aarch64-apple-darwin` |
+| macOS, Intel | `ocm-node-0.1.2-x86_64-apple-darwin` |
+| Windows x64 | `ocm-node-0.1.2-x86_64-pc-windows-msvc.exe` |
+| Linux x64 (static) | `ocm-node-0.1.2-x86_64-unknown-linux-musl` |
 
 **macOS** (the binaries are not signed yet, so clear the quarantine flag first):
 
 ```bash
-chmod +x ocm-node-0.1.1-aarch64-apple-darwin
-xattr -d com.apple.quarantine ocm-node-0.1.1-aarch64-apple-darwin
+chmod +x ocm-node-0.1.2-aarch64-apple-darwin
+xattr -d com.apple.quarantine ocm-node-0.1.2-aarch64-apple-darwin
 ollama pull qwen2.5:1.5b
-./ocm-node-0.1.1-aarch64-apple-darwin --coordinator https://your-coordinator.example \
+./ocm-node-0.1.2-aarch64-apple-darwin --coordinator https://your-coordinator.example \
   --models qwen2.5:1.5b --name my-laptop
 ```
 
@@ -94,7 +94,7 @@ ollama pull qwen2.5:1.5b
 
 ```powershell
 ollama pull qwen2.5:1.5b
-.\ocm-node-0.1.1-x86_64-pc-windows-msvc.exe --coordinator https://your-coordinator.example --models qwen2.5:1.5b --name my-laptop
+.\ocm-node-0.1.2-x86_64-pc-windows-msvc.exe --coordinator https://your-coordinator.example --models qwen2.5:1.5b --name my-laptop
 ```
 
 Either agent asks for the enrollment token at a hidden prompt, so it never lands in your shell
@@ -546,7 +546,7 @@ cargo test --manifest-path crates/ocm-node/Cargo.toml         # Rust agent
 ```
 
 
-Current counts (v0.1.1, clean checkout with no extras, no Ollama and no TimescaleDB): **97 passed, 3 skipped** in Python, **51 passed** in the Rust workspace and **10 passed** in `ocm-node`. The table counts tests per file, 103 in total; a file that skips at import is collected as a single item, so a clean run collects 100. The three skips say exactly what is missing: `psycopg` plus a database (which holds back the four TimescaleDB tests), `sentry_sdk`, and Ollama on `127.0.0.1:11434`.
+Current counts (v0.1.2, clean checkout with no extras, no Ollama and no TimescaleDB): **97 passed, 3 skipped** in Python, **51 passed** in the Rust workspace and **10 passed** in `ocm-node`. The table counts tests per file, 103 in total; a file that skips at import is collected as a single item, so a clean run collects 100. The three skips say exactly what is missing: `psycopg` plus a database (which holds back the four TimescaleDB tests), `sentry_sdk`, and Ollama on `127.0.0.1:11434`.
 
 | File | Tests | Covers |
 |---|---|---|
