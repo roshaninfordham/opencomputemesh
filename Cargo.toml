@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/ocm-proto", "crates/ocm-sched"]
-exclude = ["crates/ocm-node"]
+exclude = ["crates/ocm-node", "fuzz"]
 
 [workspace.package]
 version = "0.2.0-alpha.0"
