@@ -74,7 +74,8 @@ ollama pull qwen2.5:1.5b
 ./ocm-node-0.1.2-aarch64-apple-darwin \
   --coordinator https://your-coordinator \
   --models qwen2.5:1.5b --name my-laptop</code></pre>
-      <p class="status">Linux uses the musl binary, Windows the <code>.exe</code>, with the same flags.</p></div>
+      <p class="status">Linux uses the musl binary, Windows the <code>.exe</code>, with the same flags.</p>
+      <p class="status">Already running SIE, vLLM or LM Studio? Share it with <code>--runtime openai</code>; no Ollama needed.</p></div>
     <div class="card"><h3>3. Join from any device</h3><p>Open <code>/join/&lt;code&gt;</code> on a phone, tablet or laptop and pick a nickname.</p>
       <ol><li>No install, no account.</li><li>Joining shares no compute.</li><li>Capacity exists only while someone runs an agent with approved models.</li></ol>
       <p class="status">Verify a host with <code>curl /healthz</code> and <code>ocm check-ledger</code>.</p></div>
@@ -98,7 +99,7 @@ ollama pull qwen2.5:1.5b
   </div>
 
   <h2>How it fits together</h2>
-  <img class="arch" src="images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator that schedules jobs, records receipts and moves credits; Python and Rust node agents dial out to local Ollama, an opted-in remote runtime or the Gemini API; an optional Tinfoil attested tier and a Cognee memory seam sit behind the same interfaces">
+  <img class="arch" src="images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator that schedules jobs, records receipts and moves credits; Python and Rust node agents dial out and run models through one runtime interface covering local Ollama, any OpenAI-compatible server such as Superlinked SIE, an opted-in remote runtime and the Gemini API; the optional Tinfoil attested tier sits behind the coordinator, and Cognee memory is an owner-hosted seam outside it">
 
   <footer>Open source under Apache-2.0, and for everyone. And that's OpenComputeMesh.</footer>
 </main>

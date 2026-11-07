@@ -182,7 +182,7 @@ The comparison shown ran both nodes on the same Mac, so it demonstrates the mech
 
 ## Architecture at a glance
 
-<p align="center"><img src="docs/images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator that schedules jobs, records receipts and moves credits; Python and Rust node agents dial out to local Ollama, an opted-in remote runtime or Gemini; an optional Tinfoil attested tier and a Cognee memory seam sit behind the same interfaces" width="100%"></p>
+<p align="center"><img src="docs/images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator that schedules jobs, records receipts and moves credits; Python and Rust node agents dial out and run models through one runtime interface covering local Ollama, any OpenAI-compatible server such as Superlinked SIE, an opted-in remote runtime and Gemini; the optional Tinfoil attested tier sits behind the coordinator, and Cognee memory is an owner-hosted seam outside it" width="100%"></p>
 
 Each layer is a slot with one interface. The box borders show what is built and verified, what is built but needs credentials to verify live, and what is only an extension point.
 
@@ -299,6 +299,8 @@ flowchart LR
   A1 -- "outbound wss /ws/node" --> C
   A2 -- "outbound wss /ws/node" --> C
   RA -. "--runtime gemini (optional)<br/>streamGenerateContent,<br/>key stays on the node" .-> G["Gemini API"]
+  RA -. "--runtime openai<br/>chat-completions over HTTP" .-> SIE["Superlinked SIE, vLLM,<br/>LM Studio, llama.cpp"]
+  A1 -. "owner-hosted memory<br/>(seam only, not in the job path)" .-> MEM["Cognee<br/>outside the coordinator"]
 ```
 
 The database is the source of truth for durable state. TimescaleDB, when enabled, holds a derived copy of job metrics only. Live sockets, in-flight token streams and prompts exist only in the coordinator's memory, so exactly one coordinator process must run (uvicorn is started with a single worker). The job state machine, wire messages, scheduling, and retry, timeout and cancel rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

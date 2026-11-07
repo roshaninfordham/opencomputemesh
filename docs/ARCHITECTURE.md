@@ -48,6 +48,21 @@ The coordinator normalizes `final_stats` with `normalize_ollama` (`ocm/metrics.p
 
 `OpenAICompatAdapter` covers every server that speaks the chat-completions protocol, which is why the mesh needs no client per engine: SIE, vLLM, LM Studio, llama.cpp's server and TGI all answer `POST /v1/chat/completions` with a `data:` event stream. Two details matter. The final usage chunk is requested with `stream_options: {"include_usage": true}`, and a `400` that names that field is retried once without it rather than failing the job, because not every compatible server accepts it. And these servers expose an `id`, not a content digest, so their models carry `digest: null` and cannot take part in digest-matched benchmarks; token counts still come from the server's own `usage` block, while durations stay `null` because the protocol reports none.
 
+## Where third-party software sits
+
+Three outside pieces appear in this design. None of them sits in the request path by default, and none is
+vendored: each is reached over a documented interface, so the mesh keeps working when it is absent.
+
+| Piece | Where it runs | How the mesh reaches it | What is verified | What it cannot do |
+|---|---|---|---|---|
+| Superlinked SIE (Apache-2.0) | The contributor's own machine, as `sie-server` in Docker or via `pip` | `ocm-agent --runtime openai`. The agent speaks SIE's OpenAI chat-completions endpoint at `http://127.0.0.1:8080`; the coordinator never talks to SIE and does not know it exists beyond the model ids the node advertises | Adapter covered by mock-transport tests, plus a live run against an OpenAI-compatible HTTP server through the real coordinator, agent and ledger. Not run against a real SIE cluster here | Only `/v1/chat/completions` is used. Embeddings, rerank, extract, guard and decide endpoints are not routed or metered. Model ids carry no digest, so those nodes cannot take part in digest-matched benchmarks |
+| Tinfoil | A GPU enclave operated under our Tinfoil organisation | `tools/tinfoil-gateway`, a stateless axum proxy that pins the enclave origin and forwards the OpenAI-shaped request; `ocm-config` declares `backend tinfoil` pools with a mandatory `repo` | Gateway smoke-tested live against an enclave with the fingerprint pinned; probe reproduces attestation verification | Not deployed, so no public endpoint exists. It proves what ran; it does not train, and a contributor's laptop can never be attested, so those nodes stay `attested: false` |
+| Cognee | The node owner's own infrastructure, out of process | `ocm/memory.py`, a dataset-scoped HTTP client; the coordinator never holds memory content | 11 tests: dataset scoping, a dataset name cannot escape its scope, empty input refused, and failures plus `repr` never carry what was remembered. Verified keyless against a local instance | Not wired into the agent job path yet: no request is served differently because memory exists. It is a seam, not a feature in the routing story |
+
+The rule that keeps these honest: a receipt states what the serving runtime reported and which tier served it.
+SIE is a runtime, so it appears in the receipt's model and timings. Tinfoil is a tier, so it appears as an
+attestation claim. Cognee is neither: it never appears on a receipt at all.
+
 ## Metrics sink and observability
 
 - **TimescaleDB sink** (`ocm/timeseries.py`). `Hub` creates a `Sink(settings.timescale_url)`; it is a no-op unless the URL is set and `psycopg` is installed. The app lifespan starts and closes it. After every terminal transition (`_settle_outcome` for completed jobs, `_finish` for failed, cancelled and expired ones) the hub calls `Sink.record(job)`, which appends a row of metric columns to a bounded deque and returns. A background task connects, ensures the schema under an advisory lock, and inserts in batches. Details and guarantees are in [SPONSORS.md](SPONSORS.md#tiger-data-timescaledb).
