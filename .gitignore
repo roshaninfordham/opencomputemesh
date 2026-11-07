@@ -9,4 +9,4 @@ web/dist/
 .playwright-mcp/
 .superpowers/
 
-/target
+target/
