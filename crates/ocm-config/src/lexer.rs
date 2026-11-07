@@ -55,8 +55,11 @@ impl<'a> Lexer<'a> {
         let mut out = Vec::new();
         while let Some(&byte) = self.bytes.get(self.i) {
             match byte {
-                b' ' | b'\t' | b'\r' => self.advance(1),
                 b'\n' => self.newline(),
+                // Every byte `word` treats as a terminator must be consumed
+                // here, or it would yield an empty word without moving and the
+                // lexer would loop forever on a form feed or vertical tab.
+                b if b.is_ascii_whitespace() => self.advance(1),
                 b'#' => self.skip_comment(),
                 b'{' => out.push(self.punct(Tok::LBrace)),
                 b'}' => out.push(self.punct(Tok::RBrace)),

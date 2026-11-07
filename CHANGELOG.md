@@ -13,6 +13,11 @@ Semantic Versioning.
   the demo runbook are gone, along with the video build directory and the 4.9 MB preview GIF. The
   README (616 lines) and landing page now say the same things in a fraction of the space.
 
+### Fixed
+- A form feed in a configuration file made the lexer emit empty tokens at one offset for ever, so
+  `ocm -t` ran out of memory instead of reporting an error. Found by the fuzz target the moment CI
+  could run it.
+
 ## [0.1.2] - 2026-11-07
 
 ### Added

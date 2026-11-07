@@ -92,6 +92,15 @@ fn errors_report_source_line_and_column() {
 }
 
 #[test]
+fn a_form_feed_is_whitespace_and_does_not_stall_the_lexer() {
+    // `word` stops at any ASCII whitespace. Before the lexer skipped the same
+    // set, a form feed produced an empty word at a fixed offset forever.
+    let doc = parse("ocm.conf", "\u{0c}listen 8080;\u{0c}").unwrap();
+    assert_eq!(doc.nodes.len(), 1);
+    assert_eq!(doc.nodes[0].name, "listen");
+}
+
+#[test]
 fn the_example_config_parses() {
     let text = include_str!("fixtures/ocm.conf");
     let doc = parse("ocm.conf", text).unwrap();
