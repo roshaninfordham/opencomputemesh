@@ -1,3 +1,5 @@
+//! Frame envelope tests for protocol v2.
+
 use ocm_proto::{Body, Frame, MAX_FRAME_BYTES, PROTOCOL_VERSION, ProtoError};
 
 #[test]
@@ -16,7 +18,10 @@ fn rejects_unknown_top_level_field() {
 #[test]
 fn rejects_oversized_frame() {
     let raw = vec![b' '; MAX_FRAME_BYTES + 1];
-    assert_eq!(Frame::decode(&raw), Err(ProtoError::TooLarge(MAX_FRAME_BYTES + 1)));
+    assert_eq!(
+        Frame::decode(&raw),
+        Err(ProtoError::TooLarge(MAX_FRAME_BYTES + 1))
+    );
 }
 
 #[test]
@@ -37,7 +42,12 @@ fn errors_never_echo_payload() {
     let err = Frame::decode(raw).unwrap_err();
     assert!(!err.to_string().contains("SECRET-PROMPT"), "{err}");
     let raw = br#"{"v":"SECRET-PROMPT","id":1,"ts":1,"body":{"type":"ping"}}"#;
-    assert!(!Frame::decode(raw).unwrap_err().to_string().contains("SECRET-PROMPT"));
+    assert!(
+        !Frame::decode(raw)
+            .unwrap_err()
+            .to_string()
+            .contains("SECRET-PROMPT")
+    );
 }
 
 #[test]
@@ -46,5 +56,8 @@ fn deep_nesting_is_malformed_not_a_crash() {
     raw.push_str(&"[".repeat(10_000));
     raw.push_str(&"]".repeat(10_000));
     raw.push('}');
-    assert!(matches!(Frame::decode(raw.as_bytes()), Err(ProtoError::Malformed(_))));
+    assert!(matches!(
+        Frame::decode(raw.as_bytes()),
+        Err(ProtoError::Malformed(_))
+    ));
 }

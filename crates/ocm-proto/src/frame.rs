@@ -49,7 +49,10 @@ impl fmt::Display for ProtoError {
         match self {
             Self::TooLarge(n) => write!(f, "frame of {n} bytes exceeds {MAX_FRAME_BYTES}"),
             Self::Malformed(why) => write!(f, "malformed frame: {why}"),
-            Self::Version(v) => write!(f, "unsupported protocol version {v}; upgrade to version {PROTOCOL_VERSION}"),
+            Self::Version(v) => write!(
+                f,
+                "unsupported protocol version {v}; upgrade to version {PROTOCOL_VERSION}"
+            ),
             Self::MissingSignature => f.write_str("missing signature"),
             Self::BadSignature => f.write_str("invalid signature"),
         }
@@ -61,7 +64,13 @@ impl std::error::Error for ProtoError {}
 impl Frame {
     /// A new unsigned frame at the current protocol version.
     pub fn new(id: u64, ts: u64, body: Body) -> Self {
-        Self { v: PROTOCOL_VERSION, id, ts, body, sig: None }
+        Self {
+            v: PROTOCOL_VERSION,
+            id,
+            ts,
+            body,
+            sig: None,
+        }
     }
 
     /// Canonical encoding: struct fields serialize in declaration order, so equal frames encode equally.
@@ -83,7 +92,8 @@ impl Frame {
         match serde_json::from_slice::<Frame>(bytes) {
             Ok(f) if f.v == PROTOCOL_VERSION => Ok(f),
             Ok(f) => Err(ProtoError::Version(f.v)),
-            Err(e) => Err(legacy_version(bytes).map_or_else(|| ProtoError::Malformed(describe(&e)), ProtoError::Version)),
+            Err(e) => Err(legacy_version(bytes)
+                .map_or_else(|| ProtoError::Malformed(describe(&e)), ProtoError::Version)),
         }
     }
 }
@@ -102,5 +112,7 @@ fn describe(e: &serde_json::Error) -> String {
 /// v1 frames are flat objects with `protocol_version`; report their version so callers can say "upgrade".
 fn legacy_version(bytes: &[u8]) -> Option<u16> {
     let v: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-    u16::try_from(v.get("protocol_version")?.as_u64()?).ok().filter(|n| *n != PROTOCOL_VERSION)
+    u16::try_from(v.get("protocol_version")?.as_u64()?)
+        .ok()
+        .filter(|n| *n != PROTOCOL_VERSION)
 }

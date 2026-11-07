@@ -8,3 +8,4 @@ Every dependency must earn its place. Default features are disabled unless noted
 | ed25519-dalek | ocm-proto | Node identity and result-frame signatures (audited, pure Rust) |
 | getrandom | ocm-proto | OS randomness for generating node keys, without pulling a full RNG stack |
 | proptest (dev) | ocm-proto, ocm-sched | Property tests for protocol and scheduler invariants |
+| ed25519-dalek | ocm-proto | 3.0.0 has no `std` feature; signing and verification use `fast` + `zeroize` (no `alloc` needed) |

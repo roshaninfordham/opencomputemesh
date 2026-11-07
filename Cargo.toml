@@ -15,7 +15,7 @@ ocm-proto = { path = "crates/ocm-proto" }
 ocm-sched = { path = "crates/ocm-sched" }
 serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
-ed25519-dalek = { version = "3.0.0", default-features = false, features = ["std"] }
+ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast", "zeroize"] }
 getrandom = { version = "0.3", default-features = false }
 proptest = { version = "1.12", default-features = false, features = ["std"] }
 
