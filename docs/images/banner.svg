@@ -32,7 +32,6 @@
   <g transform="translate(760 36)">
     <path d="M150 150 L60 70" stroke="#6b46c1" stroke-width="2.5" fill="none"/>
     <path d="M250 150 L350 70" stroke="#a35a14" stroke-width="2.5" fill="none" stroke-dasharray="6 4"/>
-    <path d="M150 150 L60 236" stroke="#1d7449" stroke-width="2.5" fill="none" stroke-dasharray="2 6"/>
 
     <rect x="120" y="120" width="160" height="60" rx="12" fill="#15201d"/>
     <text x="200" y="146" class="t" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">coordinator</text>
@@ -49,8 +48,9 @@
     <circle cx="60" cy="236" r="30" fill="#eef6f1" stroke="#1d7449" stroke-width="2.5" stroke-dasharray="2 4"/>
     <text x="60" y="233" class="t" font-size="10" font-weight="700" fill="#185f3c" text-anchor="middle">Cognee</text>
     <text x="60" y="246" class="t" font-size="9" fill="#56645f" text-anchor="middle">memory</text>
+    <text x="60" y="282" class="t" font-size="8.5" fill="#56645f" text-anchor="middle">not in the path</text>
 
-    <rect x="252" y="126" width="150" height="24" rx="12" fill="#e6ecfb"/>
-    <text x="327" y="142" class="m" font-size="10.5" fill="#2457d6" text-anchor="middle">tokens &#183; ms &#183; credits</text>
+    <rect x="292" y="126" width="150" height="24" rx="12" fill="#e6ecfb"/>
+    <text x="367" y="142" class="m" font-size="10.5" fill="#2457d6" text-anchor="middle">tokens &#183; ms &#183; credits</text>
   </g>
 </svg>
