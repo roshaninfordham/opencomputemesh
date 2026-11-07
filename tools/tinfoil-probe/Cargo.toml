@@ -1,0 +1,15 @@
+[package]
+name = "ocm-tinfoil-probe"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "Apache-2.0"
+
+# Standalone on purpose: the SDK pins async-openai and reqwest, and the runtime
+# workspace keeps a deterministic dependency set for CI. See README.md.
+[workspace]
+
+[dependencies]
+tinfoil = { git = "https://github.com/tinfoilsh/tinfoil-rs" }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"

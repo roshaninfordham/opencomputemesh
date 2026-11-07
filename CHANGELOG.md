@@ -10,6 +10,10 @@ Semantic Versioning.
 - `ocm-proto`: protocol v2 frames with Ed25519 signing of result frames.
 - `ocm-sched`: load manager with expected-completion scoring and power-of-two-choices.
 - `ocm-config`: nginx-style declarative configuration language with full validation (`ocm -t` semantics).
+- `ocm-config`: `backend tinfoil` pools with a mandatory attestation `repo`; a config that claims
+  attestation without naming what it verifies against is rejected.
+- Confidential tier (v0.3) spec: a coordinator that routes and bills inference it cannot read.
+- `tools/tinfoil-probe`: reproduces enclave attestation verification and prints the measurement.
 
 ## [0.1.0] - 2026-10-11
 

@@ -1,6 +1,6 @@
 //! Validation tests: typed output, cross-references and `ocm -t` error reporting.
 
-use ocm_config::{Enroll, ErrorKind, Policy, parse, test_config, validate};
+use ocm_config::{Backend, Enroll, ErrorKind, Policy, parse, test_config, validate};
 
 fn fixture() -> &'static str {
     include_str!("fixtures/ocm.conf")
@@ -242,4 +242,77 @@ share "s" {
     let errors = test_config(text).unwrap_err();
     let bad = errors.iter().filter(|e| e.kind == ErrorKind::BadValue).count();
     assert_eq!(bad, 2, "both zero values rejected: {errors:?}");
+}
+
+#[test]
+fn tinfoil_pool_requires_a_pinned_repo() {
+    let errors = test_config(
+        r#"
+network "m" { listen 8080; }
+pool "c" { backend tinfoil; model gpt-oss-120b; }
+"#,
+    )
+    .unwrap_err();
+    let err = errors
+        .iter()
+        .find(|e| e.kind == ErrorKind::Missing)
+        .expect("a pool claiming attestation must name what it verifies against");
+    assert!(err.detail.contains("repo"), "{err}");
+}
+
+#[test]
+fn tinfoil_pool_records_its_attestation_source() {
+    let cfg = test_config(
+        r#"
+network "m" { listen 8080; }
+pool "c" {
+    backend tinfoil;
+    model gpt-oss-120b;
+    repo tinfoilsh/confidential-model-router;
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(cfg.pools["c"].backend, Backend::Tinfoil);
+    assert_eq!(
+        cfg.pools["c"].repo.as_deref(),
+        Some("tinfoilsh/confidential-model-router")
+    );
+    assert_eq!(cfg.pools["c"].policy, Policy::ExpectedMs);
+}
+
+#[test]
+fn a_community_pool_defaults_and_rejects_a_stray_repo() {
+    let cfg = test_config(
+        r#"
+network "m" { listen 8080; }
+pool "p" { model qwen; }
+"#,
+    )
+    .unwrap();
+    assert_eq!(cfg.pools["p"].backend, Backend::Community);
+    assert_eq!(cfg.pools["p"].repo, None);
+
+    let errors = test_config(
+        r#"
+network "m" { listen 8080; }
+pool "p" { model qwen; repo owner/name; }
+"#,
+    )
+    .unwrap_err();
+    assert!(errors.iter().any(|e| e.kind == ErrorKind::BadValue));
+}
+
+#[test]
+fn repo_must_look_like_owner_slash_name() {
+    for bad in ["justaname", "a/b/c", "/name", "owner/"] {
+        let text = format!(
+            "network \"m\" {{ listen 8080; }}\npool \"c\" {{ backend tinfoil; model gpt-oss-120b; repo {bad}; }}\n"
+        );
+        let errors = test_config(&text).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.kind == ErrorKind::BadValue),
+            "`{bad}` should be rejected: {errors:?}"
+        );
+    }
 }

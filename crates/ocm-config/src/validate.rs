@@ -81,6 +81,15 @@ pub struct ShareCfg {
     pub max_nodes: Option<u32>,
 }
 
+/// Where a pool's capacity comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Backend {
+    /// Contributors' own machines. Nothing about them is hardware-attested.
+    Community,
+    /// Tinfoil enclaves, verified per connection against a pinned repository.
+    Tinfoil,
+}
+
 /// Workers serving one exact model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PoolCfg {
@@ -90,6 +99,13 @@ pub struct PoolCfg {
     pub model: String,
     /// Selection policy.
     pub policy: Policy,
+    /// Where the capacity comes from.
+    pub backend: Backend,
+    /// Attestation source for [`Backend::Tinfoil`], as `owner/name`.
+    ///
+    /// Required there and rejected elsewhere: a pool that claims attestation
+    /// without naming what it verifies against has no guarantee at all.
+    pub repo: Option<String>,
 }
 
 /// An HTTP surface mapped to a pool.
@@ -367,14 +383,24 @@ fn parse_share(ctx: &mut Ctx, node: &Node) -> Option<ShareCfg> {
     })
 }
 
+fn is_repo_ref(text: &str) -> bool {
+    let mut parts = text.split('/');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty()
+    )
+}
+
 fn parse_pool(ctx: &mut Ctx, node: &Node) -> Option<PoolCfg> {
     ctx.args(node, 1);
     ctx.block(node);
-    ctx.only(node, &["model", "policy"]);
+    ctx.only(node, &["model", "policy", "backend", "repo"]);
 
     let name = node.args.first()?.clone();
     let mut model = None;
     let mut policy = Policy::ExpectedMs;
+    let mut backend = Backend::Community;
+    let mut repo = None;
 
     for child in node.children() {
         if !ctx.args(child, 1) {
@@ -383,6 +409,22 @@ fn parse_pool(ctx: &mut Ctx, node: &Node) -> Option<PoolCfg> {
         let value = child.args.first().map_or("", String::as_str);
         match child.name.as_str() {
             "model" => model = Some(value.to_owned()),
+            "backend" => match value {
+                "community" => backend = Backend::Community,
+                "tinfoil" => backend = Backend::Tinfoil,
+                _ => ctx.err(
+                    child,
+                    ErrorKind::BadValue,
+                    "`backend` must be `community` or `tinfoil`",
+                ),
+            },
+            "repo" => {
+                if is_repo_ref(value) {
+                    repo = Some(value.to_owned());
+                } else {
+                    ctx.err(child, ErrorKind::BadValue, "`repo` must look like `owner/name`");
+                }
+            }
             "policy" => match value {
                 "expected_ms" => policy = Policy::ExpectedMs,
                 "fewest_active" => policy = Policy::FewestActive,
@@ -396,8 +438,28 @@ fn parse_pool(ctx: &mut Ctx, node: &Node) -> Option<PoolCfg> {
         }
     }
 
+    match (backend, repo.as_ref()) {
+        (Backend::Tinfoil, None) => ctx.err(
+            node,
+            ErrorKind::Missing,
+            "`backend tinfoil` needs a pinned `repo`, otherwise nothing is attested",
+        ),
+        (Backend::Community, Some(_)) => ctx.err(
+            node,
+            ErrorKind::BadValue,
+            "`repo` only applies to `backend tinfoil`",
+        ),
+        (Backend::Tinfoil | Backend::Community, _) => {}
+    }
+
     if let Some(model) = model {
-        Some(PoolCfg { name, model, policy })
+        Some(PoolCfg {
+            name,
+            model,
+            policy,
+            backend,
+            repo,
+        })
     } else {
         ctx.err(node, ErrorKind::Missing, "`pool` needs a `model` directive");
         None

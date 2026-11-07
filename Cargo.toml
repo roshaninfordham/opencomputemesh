@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/ocm-proto", "crates/ocm-sched", "crates/ocm-config"]
-exclude = ["crates/ocm-node", "fuzz"]
+exclude = ["crates/ocm-node", "fuzz", "tools/tinfoil-probe"]
 
 [workspace.package]
 version = "0.2.0-alpha.0"

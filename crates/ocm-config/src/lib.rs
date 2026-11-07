@@ -15,7 +15,7 @@ pub use ast::{Document, Node};
 pub use error::{ConfigError, ErrorKind};
 pub use parse::{MAX_DEPTH, parse};
 pub use validate::{
-    Config, Enroll, NetworkCfg, Policy, PoolCfg, Rate, RouteCfg, ShareCfg, TokenCfg, validate,
+    Backend, Config, Enroll, NetworkCfg, Policy, PoolCfg, Rate, RouteCfg, ShareCfg, TokenCfg, validate,
 };
 
 /// The file name used when a caller has no better label for its text.

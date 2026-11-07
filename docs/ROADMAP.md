@@ -145,7 +145,52 @@ evidence live in `STACK-TRACKING.md`.
 - A reload changes routing policy without dropping an active stream.
 - A working network no longer requires dozens of env vars.
 
-## Phase 2 — v0.3 Beyond one room [PLANNED]
+## Phase 1.6 — v0.3 The confidential tier (Tinfoil) [NEXT]
+
+Goal: make the mesh's privacy claim checkable in hardware instead of trustable
+in prose. Spec: `docs/superpowers/specs/2026-11-07-confidential-tier-tinfoil.md`.
+
+**The sentence we sell:** your prompt is encrypted to a hardware enclave we
+cannot read, we route and bill it anyway, and the receipt names the exact code
+measurement that processed it.
+
+Why this is the critical one: the coordinator is the only component that
+necessarily sees every prompt, and today "we never log prompts" is a policy
+nobody can verify. End-to-end encryption to an attested enclave makes the
+coordinator blind by construction — and turns the receipt, our core primitive,
+from an accounting record into execution evidence.
+
+### Stories
+
+- As Priya, I route to `/private` and my request body never exists in plaintext
+  on the operator's machine. I verify the enclave myself before sending.
+- As Sam, my `ocm.conf` declares `backend tinfoil` for one pool and `community`
+  for the rest, and `ocm -t` refuses a tinfoil pool that pins no `repo`.
+- As Maya, my receipt names the enclave fingerprint and says `verified_by:
+  coordinator, client_verified: true` — or says `community` when it is, so
+  silence is never mistaken for privacy.
+- As Dev, I still contribute my laptop's GPU to the community tier, and the UI
+  does not pretend my hardware is attested.
+
+### Priorities
+
+| P | Work | Why first |
+|---|---|---|
+| P0 | `backend tinfoil` + mandatory `repo` in `ocm-config` | The tier must be declarable and misconfiguration must fail `ocm -t` |
+| P1 | Attested backend: SDK verification, EHBP byte forwarding, enclave URL allowlist | Fail closed is the whole feature |
+| P2 | Blind metering: reserve-then-reconcile budgets, trailer settlement | Billing cannot depend on reading the body |
+| P3 | Receipt `execution` block and `community` labelling | Evidence must reach the artifact users keep |
+| P4 | Coordinator deployed as a Tinfoil Container | Then users verify our code, not only the model host's |
+
+### Outcomes
+
+- A completion whose request body the coordinator provably cannot decrypt.
+- A receipt naming the code measurement, and never implying attestation where
+  there is none.
+- Attestation failure stops the request; no plaintext fallback exists to abuse.
+- Contributor hardware is honestly labelled unattested, everywhere.
+
+## Phase 2 — v0.4 Beyond one room [PLANNED]
 
 - As Sam with 200 users, I run Postgres primary, not SQLite.
 - As Maya, my request can be served by another coordinator's nodes
