@@ -1,0 +1,126 @@
+name: Release
+
+# Cut a release by pushing a tag: `git tag -a v0.1.1 -m "..." && git push origin v0.1.1`.
+# Everything below then runs on native runners, which is the only way to produce
+# real macOS and Windows artifacts: neither can be cross-compiled from Linux.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish, e.g. v0.1.1"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  node:
+    name: ocm-node (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin }   # Apple silicon
+          - { os: macos-latest, target: x86_64-apple-darwin }    # Intel Macs
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.0
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/ocm-node
+      - name: Install musl toolchain
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build
+        working-directory: crates/ocm-node
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          ext=""
+          case "${{ matrix.target }}" in *windows*) ext=".exe" ;; esac
+          mkdir -p dist
+          cp "crates/ocm-node/target/${{ matrix.target }}/release/ocm-node${ext}" \
+             "dist/ocm-node-${version}-${{ matrix.target }}${ext}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ocm-node-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  python:
+    name: Wheel (coordinator + ocm-agent)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build --wheel --out-dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  web:
+    name: Web bundle (runs on any device with a browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - name: Zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          mkdir -p dist
+          (cd web/dist && zip -qr "../../dist/opencomputemesh-web-${version}.zip" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [node, python, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

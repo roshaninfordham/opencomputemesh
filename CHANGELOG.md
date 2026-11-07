@@ -5,6 +5,14 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.1] - 2026-11-07
+
+First release with downloadable binaries for macOS (Apple silicon and Intel),
+Windows x64 and Linux x64, a wheel for the coordinator and Python agent, and the
+built web bundle. See `docs/RELEASING.md`.
+
 ### Added
 - Rust workspace with strict quality gates.
 - `ocm-proto`: protocol v2 frames with Ed25519 signing of result frames.

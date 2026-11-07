@@ -90,6 +90,12 @@ Enablers: Tauri 2 shell + shared web UI; strict TS + Biome + Playwright.
 
 Outcome: install/enroll/share/pause works macOS+Windows+Linux.
 
+Status: not started. The shared web UI already runs on every device with a browser
+(phones and tablets included) and is what the release ships; the Tauri shell adds a
+tray, auto-update and a bundled coordinator, and is the only piece that needs
+per-OS installers. It cannot be cross-compiled, so it builds on native runners like
+everything else in `release.yml`.
+
 ### 1.6 Packaging, CI, docs hygiene
 - As Sam, I `docker compose up` with signed checksums.
 
