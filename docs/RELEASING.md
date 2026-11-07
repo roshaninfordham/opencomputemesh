@@ -16,6 +16,36 @@ The tag is the release. Pushing it runs four jobs, then publishes them together 
 moving it, run the workflow manually with that tag as input
 (`workflow_dispatch`).
 
+## If you get stuck
+
+**`fatal: tag 'v0.1.1' already exists`** — you do not need to create it again; that tag is
+already on the commit you want. Skip straight to the push. Check first:
+
+```bash
+git rev-list -n1 v0.1.1        # the commit the tag points at
+git rev-parse --short main     # the commit you mean to release
+```
+
+If they differ, move the tag: `git tag -d v0.1.1 && git tag -a v0.1.1 -m "v0.1.1" <commit>`.
+If they match, `git push origin v0.1.1` is the entire remaining step.
+
+**`Username for 'https://github.com'`** — git has no credential helper, so it is asking you
+every time. Log in once with the GitHub CLI and it configures git for you:
+
+```bash
+gh auth login          # GitHub.com -> HTTPS -> yes to "Authenticate Git" -> browser
+git push origin v0.1.1
+```
+
+No GitHub CLI? Either `gh auth setup-git` after installing it, or use SSH
+(`ssh-keygen -t ed25519`, add the key to GitHub, then
+`git remote set-url origin git@github.com:OWNER/opencomputemesh.git`).
+
+**Nothing happens after the push** — confirm the tag reached GitHub with
+`git ls-remote --tags origin`, then watch the run with `gh run watch`. Tags are not
+branches: `git push` alone never sends them, and a pushed branch named `v0.1.1` would not
+trigger this workflow.
+
 ## What a release contains
 
 | Artifact | Who it is for |
