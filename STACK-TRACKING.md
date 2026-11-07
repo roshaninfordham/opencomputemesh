@@ -112,3 +112,56 @@ Branch: `feat/edge-config` (from `release/plan1`). Spec
 - [x] `route.pool` must resolve to a defined pool
 - [x] `examples/ocm.conf` is the acceptance fixture for `ocm -t`
 - [ ] Include resolution (P1) — deliberately deferred, documented as such
+
+---
+
+# Phase 1.6 — v0.3 confidential tier (Tinfoil)
+
+Spec: `docs/superpowers/specs/2026-11-07-confidential-tier-tinfoil.md`.
+
+## Status
+
+| P | Work | State |
+|---|---|---|
+| P0 | `backend tinfoil` + mandatory `repo` in `ocm-config` | **done** |
+| P1 | Attested backend: verify, EHBP byte forwarding, enclave allowlist | not started |
+| P2 | Blind metering: reserve-then-reconcile, trailer settlement | not started |
+| P3 | Receipt `execution` block, `community` labelling | not started |
+| P4 | Coordinator as a Tinfoil Container | deferred, blockers documented |
+
+## Evidence (real, this machine)
+
+- `GET /v1/models` on `inference.tinfoil.sh`: 20 models, including `gpt-oss-120b`,
+  `llama3-3-70b`, `gemma4-31b`, `glm-5-3`, `kimi-k3`, `deepseek-v4-1-flash`.
+- Chat completion `gpt-oss-120b`: content `enclave reachable`, `finish_reason:
+  stop`, usage 73 prompt + 24 completion tokens. (A first attempt with
+  `max_tokens: 32` returned `content: null` — reasoning consumed the cap. Budget
+  policy must account for reasoning tokens before content.)
+- Response header on `/v1/models`: `tinfoil-pt: https://tinfoil.sh/predicate/sev-snp-guest/v2`
+  — SEV-SNP guest predicate, i.e. this really is an SNP-guest attestation, not a TLS claim.
+- `tools/tinfoil-probe` (official Rust SDK) verifies and prints:
+  `verified: true`, `enclave_fingerprint = code_fingerprint = f5bcc220a94d5c34…`
+  for `tinfoilsh/confidential-model-router`.
+
+## Gate
+
+- `cargo fmt --all --check`: clean
+- `cargo clippy --workspace --all-targets -- -D warnings`: 0 errors
+- `cargo test --workspace`: config 30 (parse 11, validate 19), frame 7, body 4,
+  sign 4, score 6 = **51 passed**, 0 failed
+- `tools/tinfoil-probe`: builds and verifies against the live service
+
+## Notes and risks
+
+1. **The upstream key is server-side only.** It lives in untracked `.env`
+   (`.gitignore:7`), never in `ocm.conf`, a receipt, or a log. `.env.example`
+   documents `TINFOIL_API_KEY` and `TINFOIL_ROUTER_REPO` with empty values.
+2. **Contributor hardware cannot be attested.** The confidential tier covers the
+   coordinator-as-router and upstream models, not a stranger's laptop. The spec
+   states this rather than implying otherwise.
+3. **Attestation fingerprints change across enclave reboots**, so they are recorded
+   per request, never cached as a permanent claim.
+4. **Streaming usage arrives after the body**, so budgets must reserve and then
+   reconcile; a disconnect still bills.
+5. Coordinator-in-enclave is blocked on the Rust coordinator and on persistent
+   storage (the container has no disk by default), not on Tinfoil.
