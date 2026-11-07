@@ -85,7 +85,7 @@ A key an agent presents as `Authorization: Bearer ...`. Names are unique.
 
 | Setting | Values | Default | Meaning |
 |---|---|---|---|
-| `allow_models` | one or more model ids | all models | Models this key may reach |
+| `allow_models` | one or more model ids | all models | Models this key may reach; omitting it allows all, while an empty directive is an error |
 | `budget` | `<n> OCC` | unlimited | Total credits this key may spend |
 | `rate` | `<n>/s`, `<n>/min`, `<n>/h` | none | Sliding-window request limit |
 
@@ -98,7 +98,7 @@ A shareable URL, served at `/share/<name>`. Names are unique.
 | `enroll` | `node` or `request` | `node` | Whether the visitor may offer compute |
 | `expires` | `<n>ms`, `s`, `m`, `h`, `d` | never | Link lifetime |
 | `grant` | `<n> OCC` | demo default | Credits granted on use |
-| `max_nodes` | integer | unlimited | Nodes one link may enroll |
+| `max_nodes` | integer >= 1 | unlimited | Nodes one link may enroll; `0` is rejected rather than read as unlimited |
 
 ### `pool "<name>" { ... }`
 
@@ -136,7 +136,9 @@ The page also states, in plain words, what the visitor is granting: which model,
 that the node owner can see prompts, and when the link expires.
 
 Rules: a share link is single-use per node, bounded by `max_nodes`, expires on
-schedule, and can be revoked by removing the block and reloading. A `request`
+schedule, and can be revoked by removing the block and reloading. "Unlimited" is
+expressed by omitting the directive, never by a zero: an accidental `0` cannot
+silently remove the only cap on a public URL. A `request`
 share never grants compute — it only lets someone send prompts.
 
 ## 6. Sharing to your own agents
@@ -190,6 +192,8 @@ is left untouched, with a non-zero exit and the full error list.
 - Share links are hashed at rest, single-use, expiring and revocable.
 - Agent keys are shown once, stored hashed, and cannot exceed their allowlist,
   rate or budget.
+- An allowlist that fails to parse is an error, never an implicit allow-all, so a
+  typo cannot widen access.
 - Reload never widens access: a config that fails validation changes nothing.
 
 ## 10. Out of scope
@@ -207,7 +211,8 @@ is left untouched, with a non-zero exit and the full error list.
    `file:line:column` and exits non-zero.
 3. Unknown directives are rejected at top level and inside known blocks.
 4. A duplicate `pool`, `token`, `share`, `route` or `network` name is rejected.
-5. A `route` referencing an undefined `pool` is rejected.
+5. A `route` referencing an undefined `pool` is rejected, reported at the
+   route's own file and position rather than at the top of the file.
 6. Malformed durations, rates, ports, booleans and enums are rejected with the
    directive named.
 7. Block nesting beyond `MAX_DEPTH` is rejected without a stack overflow.

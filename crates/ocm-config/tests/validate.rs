@@ -16,7 +16,10 @@ fn the_example_config_is_valid_and_typed() {
     assert!(cfg.network.demo_mode);
 
     let agents = &cfg.tokens["agents"];
-    assert_eq!(agents.allow_models, vec!["qwen2.5:1.5b", "llama3.2:3b"]);
+    assert_eq!(
+        agents.allow_models,
+        Some(vec!["qwen2.5:1.5b".to_owned(), "llama3.2:3b".to_owned()])
+    );
     assert_eq!(agents.budget_occ, Some(500));
     let rate = agents.rate.unwrap();
     assert_eq!(rate.count, 60);
@@ -180,4 +183,63 @@ fn parse_errors_surface_through_ocm_t() {
     let errors = test_config("network \"m\" {\n").unwrap_err();
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].kind, ErrorKind::UnclosedBlock);
+}
+
+#[test]
+fn omitting_allow_models_allows_every_model_but_an_empty_one_is_an_error() {
+    let cfg = test_config(
+        r#"
+network "m" { listen 8080; }
+token "unrestricted" { budget 10 OCC; }
+"#,
+    )
+    .unwrap();
+    assert_eq!(cfg.tokens["unrestricted"].allow_models, None);
+
+    let errors = test_config(
+        r#"
+network "m" { listen 8080; }
+token "typo" { allow_models; }
+"#,
+    )
+    .unwrap_err();
+    assert!(
+        errors.iter().any(|e| e.kind == ErrorKind::ArgCount),
+        "a malformed allowlist must be an error, never an implicit allow-all: {errors:?}"
+    );
+}
+
+#[test]
+fn an_undefined_pool_is_reported_at_the_route() {
+    let text = "network \"m\" { listen 8080; }\nroute \"r\" {\n    pool ghost;\n}\n";
+    let errors = test_config(text).unwrap_err();
+    let err = errors
+        .iter()
+        .find(|e| e.kind == ErrorKind::UndefinedRef)
+        .expect("undefined ref reported");
+    assert_eq!(err.line, 2, "reported at the route, not at 1:1: {errors:?}");
+    assert_eq!(err.column, 1);
+}
+
+#[test]
+fn include_without_a_path_is_rejected() {
+    let missing = test_config("network \"m\" { listen 8080; }\ninclude;\n").unwrap_err();
+    assert!(missing.iter().any(|e| e.kind == ErrorKind::ArgCount));
+
+    let blocked = test_config("network \"m\" { listen 8080; }\ninclude \"a.conf\" { }\n").unwrap_err();
+    assert!(blocked.iter().any(|e| e.kind == ErrorKind::BadValue));
+}
+
+#[test]
+fn zero_expiry_and_zero_max_nodes_are_rejected() {
+    let text = r#"
+network "m" { listen 8080; }
+share "s" {
+    expires 0s;
+    max_nodes 0;
+}
+"#;
+    let errors = test_config(text).unwrap_err();
+    let bad = errors.iter().filter(|e| e.kind == ErrorKind::BadValue).count();
+    assert_eq!(bad, 2, "both zero values rejected: {errors:?}");
 }

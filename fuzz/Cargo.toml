@@ -10,11 +10,19 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+ocm-config = { path = "../crates/ocm-config" }
 ocm-proto = { path = "../crates/ocm-proto" }
 
 [[bin]]
 name = "decode_frame"
 path = "fuzz_targets/decode_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_config"
+path = "fuzz_targets/parse_config.rs"
 test = false
 doc = false
 bench = false

@@ -82,9 +82,9 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   fuzz:
-    name: Fuzz frame decoder (60s)
+    name: Fuzz frame decoder and config parser (60s each)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -92,3 +92,4 @@ jobs:
         with:
           tool: cargo-fuzz
       - run: cargo fuzz run decode_frame -- -max_total_time=60 -max_len=65536
+      - run: cargo fuzz run parse_config -- -max_total_time=60 -max_len=65536

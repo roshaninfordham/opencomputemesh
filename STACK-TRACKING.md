@@ -64,8 +64,9 @@ Branch: `feat/edge-config` (from `release/plan1`). Spec
 
 - `cargo fmt --all --check`: clean
 - `cargo clippy --workspace --all-targets -- -D warnings`: 0 errors
-- `cargo test --workspace`: config 22 (parse 11, validate 11), frame 7, body 4,
-  sign 4, score 6 = **43 passed**, 0 failed
+- `cargo test --workspace`: config 26 (parse 11, validate 15), frame 7, body 4,
+  sign 4, score 6 = **47 passed**, 0 failed
+- `cargo check --manifest-path fuzz/Cargo.toml --bins`: clean (both targets)
 
 ## Defects found and fixed during review
 
@@ -85,6 +86,22 @@ Branch: `feat/edge-config` (from `release/plan1`). Spec
 7. **Doc drift caught while writing the spec**: `docs/ARCHITECTURE.md` showed a
    `pool` nested inside a `route` and claimed `include` was expanded in P0. Both
    corrected (include is parsed and retained only).
+8. **`allow_models;` degraded to allow-all** — an empty directive produced both
+   an `ArgCount` error *and* the documented "all models" default, so a typo could
+   widen a key's reach. `TokenCfg::allow_models` is now `Option<Vec<String>>`:
+   `None` is allow-all, an empty directive is an error and never a wildcard.
+9. **Undefined pool references were reported at `ocm.conf:1:1`** — the
+   cross-reference pass ran after the node was dropped, so it had no location to
+   report. Route references now carry their own source, line and column.
+10. **`include` without a path, and `include ... { }`, were silently accepted** —
+    now `ArgCount` and `BadValue` respectively.
+11. **`expires 0s` and `max_nodes 0` were accepted** — a link that can never be
+    used. Both are errors now; "unlimited" is expressed by omitting the
+    directive. This rule caught the fixture itself, which used `max_nodes 0` to
+    mean unlimited: the ambiguous spelling is gone rather than special-cased.
+12. **The text parser had no fuzz coverage** — added the `parse_config` target
+    and a second CI step, because `include` will soon feed it arbitrary file
+    contents.
 
 ## Review focus
 

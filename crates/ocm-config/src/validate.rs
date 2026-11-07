@@ -53,9 +53,14 @@ pub struct NetworkCfg {
 pub struct TokenCfg {
     /// Key name.
     pub name: String,
-    /// Models the key may reach.
-    pub allow_models: Vec<String>,
-    /// Credit budget in whole OCC.
+    /// Models the key may reach; `None` allows every model.
+    ///
+    /// An `allow_models` directive with no arguments is an error rather than an
+    /// allow-all wildcard, so a typo can never widen access.
+    pub allow_models: Option<Vec<String>>,
+    /// Credit budget in whole OCC; `None` is unlimited.
+    ///
+    /// `Some(0)` is meaningful: it suspends the key without deleting it.
     pub budget_occ: Option<u64>,
     /// Requests per window.
     pub rate: Option<Rate>,
@@ -259,7 +264,7 @@ fn parse_token(ctx: &mut Ctx, node: &Node) -> Option<TokenCfg> {
     ctx.only(node, &["allow_models", "budget", "rate"]);
 
     let name = node.args.first()?.clone();
-    let mut allow_models = Vec::new();
+    let mut allow_models = None;
     let mut budget_occ = None;
     let mut rate = None;
 
@@ -267,9 +272,12 @@ fn parse_token(ctx: &mut Ctx, node: &Node) -> Option<TokenCfg> {
         match child.name.as_str() {
             "allow_models" => {
                 if child.args.is_empty() {
+                    // Never fall through to `None`: that means every model, and a
+                    // malformed allowlist must not widen access.
                     ctx.err(child, ErrorKind::ArgCount, "`allow_models` needs a model id");
+                    continue;
                 }
-                allow_models.clone_from(&child.args);
+                allow_models = Some(child.args.clone());
             }
             "budget" => {
                 if !ctx.args(child, 2) {
@@ -337,11 +345,13 @@ fn parse_share(ctx: &mut Ctx, node: &Node) -> Option<ShareCfg> {
                 _ => ctx.err(child, ErrorKind::BadValue, "`enroll` must be `node` or `request`"),
             },
             "expires" => match parse_duration(value) {
-                Some(ms) => expires_ms = Some(ms),
+                Some(ms) if ms > 0 => expires_ms = Some(ms),
+                Some(_) => ctx.err(child, ErrorKind::BadValue, "`expires` must be longer than 0s"),
                 None => ctx.err(child, ErrorKind::BadValue, "`expires` must look like `24h`"),
             },
             "max_nodes" => match value.parse::<u32>() {
-                Ok(n) => max_nodes = Some(n),
+                Ok(n) if n > 0 => max_nodes = Some(n),
+                Ok(_) => ctx.err(child, ErrorKind::BadValue, "`max_nodes` must be at least 1"),
                 Err(_) => ctx.err(child, ErrorKind::BadValue, "`max_nodes` must be a number"),
             },
             _ => {}
@@ -446,6 +456,10 @@ pub fn validate(doc: &Document) -> Result<Config, Vec<ConfigError>> {
     let mut shares = BTreeMap::new();
     let mut pools = BTreeMap::new();
     let mut routes = BTreeMap::new();
+    // Cross-references are resolved after the whole file is read (declaration
+    // order must not matter), but each error still has to carry the line the
+    // offending route was written on.
+    let mut route_refs: Vec<(String, String, String, u32, u32)> = Vec::new();
 
     for node in &doc.nodes {
         match node.name.as_str() {
@@ -477,11 +491,23 @@ pub fn validate(doc: &Document) -> Result<Config, Vec<ConfigError>> {
             }
             "route" => {
                 if let Some(parsed) = parse_route(&mut ctx, node) {
+                    route_refs.push((
+                        parsed.name.clone(),
+                        parsed.pool.clone(),
+                        node.source.clone(),
+                        node.line,
+                        node.column,
+                    ));
                     insert_unique(&mut ctx, node, &mut routes, parsed.name.clone(), parsed);
                 }
             }
             // Recognised and retained; expansion lands with P1 include resolution.
-            "include" => {}
+            "include" => {
+                ctx.args(node, 1);
+                if node.has_block() {
+                    ctx.err(node, ErrorKind::BadValue, "`include` takes a path, not a block");
+                }
+            }
             other => {
                 let detail = format!("unknown top-level directive `{other}`");
                 ctx.err(node, ErrorKind::UnknownDirective, detail);
@@ -499,17 +525,14 @@ pub fn validate(doc: &Document) -> Result<Config, Vec<ConfigError>> {
         ));
     }
 
-    for route in routes.values() {
-        if !pools.contains_key(&route.pool) {
-            let detail = format!(
-                "route `{}` references undefined pool `{}`",
-                route.name, route.pool
-            );
+    for (name, pool, source, line, column) in route_refs {
+        if !pools.contains_key(&pool) {
+            let detail = format!("route `{name}` references undefined pool `{pool}`");
             ctx.errors.push(ConfigError::new(
                 ErrorKind::UndefinedRef,
-                crate::DEFAULT_SOURCE,
-                1,
-                1,
+                source,
+                line,
+                column,
                 detail,
             ));
         }

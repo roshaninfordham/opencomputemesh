@@ -131,8 +131,8 @@ rate limits. Spec: `docs/superpowers/specs/2026-11-07-edge-config-and-sharing.md
 | P5 | Hot reload: `ocm reload`, config version stamped on receipts | Operations without restarts |
 | P6 | Config-driven limits replacing `OCM_*` sprawl (env stays as overrides) | Removes setup friction |
 
-Progress: P0 shipped in `crates/ocm-config` (22 tests, `ocm -t` semantics as
-`test_config()`). P1-P6 are specified in
+Progress: P0 shipped in `crates/ocm-config` (26 tests, fuzzed, `ocm -t`
+semantics as `test_config()`). P1-P6 are specified in
 `docs/superpowers/plans/2026-11-07-v0.2-plan-2-config.md`; live status and gate
 evidence live in `STACK-TRACKING.md`.
 
