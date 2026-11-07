@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="OpenComputeMesh architecture: browsers and API clients talk to one coordinator; node agents connect outbound and run models through pluggable runtime adapters">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" role="img" aria-label="OpenComputeMesh architecture: browsers and API clients talk to one coordinator that schedules jobs, records receipts and moves credits; Python and Rust node agents connect outbound to run models on local Ollama, an opted-in remote runtime or Gemini; an optional Tinfoil attested tier and a Cognee memory service sit behind the same interfaces">
   <title>OpenComputeMesh architecture</title>
   <defs>
     <style>
@@ -6,6 +6,7 @@
       .h { font-size: 17px; font-weight: 700; fill: #15201d; }
       .b { font-size: 13px; fill: #15201d; }
       .s { font-size: 12px; fill: #56645f; }
+      .m { font-size: 12px; fill: #15201d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
       .lbl { font-size: 12px; fill: #2457d6; font-weight: 600; }
       .box { fill: #ffffff; stroke: #d6ddda; stroke-width: 2; }
       .ok { fill: #ffffff; stroke: #1d7449; stroke-width: 2; }
@@ -21,106 +22,136 @@
       <path d="M0 0L10 5L0 10z" fill="#a3b0ab"/>
     </marker>
   </defs>
-  <rect width="1280" height="640" rx="20" fill="#f3f5f3"/>
+  <rect width="1280" height="820" rx="20" fill="#f3f5f3"/>
 
   <!-- column headings -->
   <g class="t s">
-    <text x="60" y="48">People</text>
-    <text x="400" y="48">One coordinator (trust and accounting boundary)</text>
-    <text x="900" y="48">Contributors' machines (no inbound ports)</text>
+    <text x="42" y="46">People (any device)</text>
+    <text x="362" y="46">One coordinator (trust and accounting boundary)</text>
+    <text x="882" y="46">Contributors' machines (no inbound ports)</text>
   </g>
 
   <!-- clients -->
-  <rect x="40" y="70" width="270" height="96" rx="14" class="ok"/>
-  <text x="60" y="102" class="t h">Browser (phone or laptop)</text>
-  <text x="60" y="126" class="t b">Join by QR, run a prompt,</text>
-  <text x="60" y="146" class="t b">watch tokens stream, read receipts</text>
+  <rect x="40" y="66" width="272" height="104" rx="14" class="ok"/>
+  <text x="60" y="98" class="t h">Browser, phone or laptop</text>
+  <text x="60" y="122" class="t b">Join by QR or link, run a prompt,</text>
+  <text x="60" y="142" class="t b">watch tokens stream, read receipts</text>
+  <text x="60" y="160" class="t s">No install, no compute shared</text>
 
-  <rect x="40" y="190" width="270" height="80" rx="14" class="ok"/>
+  <rect x="40" y="190" width="272" height="80" rx="14" class="ok"/>
   <text x="60" y="222" class="t h">API clients</text>
   <text x="60" y="246" class="t b">OpenAI-style /v1/chat/completions</text>
 
+  <rect x="40" y="290" width="272" height="72" rx="14" class="ext"/>
+  <text x="60" y="320" class="t b" font-weight="600">Desktop app (Tauri)</text>
+  <text x="60" y="340" class="t s">roadmap, not built</text>
+
   <!-- coordinator -->
-  <rect x="380" y="70" width="440" height="330" rx="16" class="ok"/>
-  <text x="404" y="104" class="t h">Coordinator: FastAPI, one process</text>
+  <rect x="360" y="66" width="472" height="336" rx="16" class="ok"/>
+  <text x="384" y="100" class="t h">Coordinator: FastAPI, one process</text>
   <g class="t b">
-    <text x="404" y="134">Join and sessions, origin checks, rate limits</text>
-    <text x="404" y="158">Scheduler: exact model, online, least busy</text>
-    <text x="404" y="182">Job state machine, retries, cancel, timeouts</text>
-    <text x="404" y="206">Metrics with provenance (runtime, coordinator, browser)</text>
-    <text x="404" y="230">Credits: reserve, settle, release (micro-OCC)</text>
+    <text x="384" y="128">Join and sessions, origin checks, rate limits</text>
+    <text x="384" y="150">Scheduler: exact model, online, least busy</text>
+    <text x="384" y="172">Job state machine, retries, cancel, timeouts</text>
+    <text x="384" y="194">Receipts: runtime-reported tokens and timings</text>
+    <text x="384" y="216">Credits: reserve, settle, release (micro-OCC)</text>
   </g>
+  <rect x="382" y="234" width="212" height="58" rx="10" class="ok"/>
+  <text x="396" y="257" class="t b" font-weight="600">SQLite (WAL)</text>
+  <text x="396" y="277" class="t s">jobs + append-only ledger</text>
 
-  <!-- storage + observability inside coordinator column -->
-  <rect x="404" y="252" width="190" height="62" rx="10" class="ok"/>
-  <text x="418" y="276" class="t b" font-weight="600">SQLite (WAL)</text>
-  <text x="418" y="296" class="t s">jobs + append-only ledger</text>
+  <rect x="606" y="234" width="208" height="58" rx="10" class="ok"/>
+  <text x="620" y="257" class="t b" font-weight="600">Tiger Data</text>
+  <text x="620" y="277" class="t s">TimescaleDB, built</text>
 
-  <rect x="606" y="252" width="190" height="62" rx="10" class="ok"/>
-  <text x="620" y="276" class="t b" font-weight="600">Tiger Data</text>
-  <text x="620" y="296" class="t s">TimescaleDB, verified locally</text>
+  <rect x="382" y="304" width="212" height="58" rx="10" class="cred"/>
+  <text x="396" y="327" class="t b" font-weight="600">Sentry</text>
+  <text x="396" y="347" class="t s">errors, prompts scrubbed</text>
 
-  <rect x="404" y="324" width="190" height="62" rx="10" class="cred"/>
-  <text x="418" y="348" class="t b" font-weight="600">Sentry</text>
-  <text x="418" y="368" class="t s">errors, prompts scrubbed</text>
+  <rect x="606" y="304" width="208" height="58" rx="10" class="ok"/>
+  <text x="620" y="327" class="t b" font-weight="600">Decision export</text>
+  <text x="620" y="347" class="t m">ocm export-decisions</text>
 
-  <rect x="606" y="324" width="190" height="62" rx="10" class="ext"/>
-  <text x="620" y="348" class="t b" font-weight="600">Postgres ledger</text>
-  <text x="620" y="368" class="t s">extension point</text>
+  <text x="382" y="386" class="t s">One process owns live sockets and in-flight tokens.</text>
+
+  <!-- confidential tier -->
+  <rect x="360" y="428" width="472" height="94" rx="14" class="cred"/>
+  <text x="384" y="458" class="t h">Confidential tier: Tinfoil gateway</text>
+  <text x="384" y="482" class="t b">Attested enclave, fingerprint pinned, OpenAI-compatible proxy.</text>
+  <text x="384" y="502" class="t s">Built and verified against a live enclave; deployment needs our Tinfoil org.</text>
 
   <!-- node agents -->
-  <rect x="890" y="70" width="350" height="110" rx="14" class="ok"/>
-  <text x="910" y="102" class="t h">Node agent (Python or Rust)</text>
-  <text x="910" y="126" class="t b">Owner approves models, pause or revoke</text>
-  <text x="910" y="146" class="t b">Outbound WSS only, single-use enrollment,</text>
-  <text x="910" y="166" class="t b">credential stored 0600</text>
+  <rect x="880" y="66" width="362" height="104" rx="14" class="ok"/>
+  <text x="900" y="98" class="t h">Python agent (ocm-agent)</text>
+  <text x="900" y="122" class="t b">Approves models, pause or revoke</text>
+  <text x="900" y="142" class="t b">Outbound WSS, single-use enrollment,</text>
+  <text x="900" y="160" class="t b">credential stored 0600</text>
 
-  <!-- runtimes -->
-  <text x="890" y="222" class="t s">Runtime adapters (one interface)</text>
-  <rect x="890" y="236" width="168" height="66" rx="10" class="ok"/>
-  <text x="906" y="262" class="t b" font-weight="600">Ollama</text>
-  <text x="906" y="282" class="t s">127.0.0.1 only</text>
+  <rect x="880" y="186" width="362" height="104" rx="14" class="ok"/>
+  <text x="900" y="218" class="t h">Rust node (ocm-node)</text>
+  <text x="900" y="242" class="t b">Single binary, same flags and state file</text>
+  <text x="900" y="262" class="t b">macOS ARM and Intel, Windows, Linux</text>
+  <text x="900" y="280" class="t s">Ollama runtime only</text>
 
-  <rect x="1072" y="236" width="168" height="66" rx="10" class="cred"/>
-  <text x="1088" y="262" class="t b" font-weight="600">Gemini API</text>
-  <text x="1088" y="279" class="t s">Python agent only</text>
-  <text x="1088" y="295" class="t s">key stays on node</text>
+  <text x="880" y="316" class="t s">Runtime adapters (one interface)</text>
+  <rect x="880" y="330" width="172" height="66" rx="10" class="ok"/>
+  <text x="896" y="356" class="t b" font-weight="600">Ollama</text>
+  <text x="896" y="376" class="t s">127.0.0.1 only by default</text>
 
-  <rect x="890" y="316" width="350" height="56" rx="10" class="ext"/>
-  <text x="906" y="340" class="t b" font-weight="600">llama.cpp, vLLM, MLX, OpenAI-compatible</text>
-  <text x="906" y="358" class="t s">extension points behind the same adapter</text>
+  <rect x="1070" y="330" width="172" height="66" rx="10" class="cred"/>
+  <text x="1086" y="356" class="t b" font-weight="600">Gemini API</text>
+  <text x="1086" y="374" class="t s">Python agent only,</text>
+  <text x="1086" y="390" class="t s">key stays on the node</text>
+
+  <rect x="880" y="412" width="362" height="66" rx="10" class="cred"/>
+  <text x="896" y="438" class="t b" font-weight="600">Remote runtime (opt-in)</text>
+  <text x="896" y="458" class="t s">--allow-remote-runtime, probed once,</text>
+  <text x="896" y="472" class="t s">labelled attested: false</text>
+
+  <rect x="880" y="494" width="362" height="66" rx="10" class="ext"/>
+  <text x="896" y="520" class="t b" font-weight="600">Cognee memory (owner-hosted)</text>
+  <text x="896" y="540" class="t s">client seam tested, out of process,</text>
+  <text x="896" y="554" class="t s">never inside the coordinator</text>
 
   <!-- wires -->
-  <path d="M310 118 H372" class="wire" marker-end="url(#a)" marker-start="url(#a)"/>
+  <path d="M312 118 H352" class="wire" marker-end="url(#a)" marker-start="url(#a)"/>
   <text x="318" y="108" class="t lbl">HTTPS + WSS</text>
-  <path d="M310 230 H372" class="wire" marker-end="url(#a)"/>
+  <path d="M312 230 H352" class="wire" marker-end="url(#a)"/>
   <text x="326" y="222" class="t lbl">HTTPS</text>
-
-  <path d="M886 125 H828" class="wire" marker-end="url(#a)"/>
-  <text x="834" y="116" class="t lbl">WSS</text>
-
-  <path d="M1200 180 V228" class="soft" marker-end="url(#g)"/>
+  <path d="M876 120 H836" class="wire" marker-end="url(#a)"/>
+  <text x="840" y="110" class="t lbl">WSS</text>
+  <path d="M876 240 H836" class="wire" marker-end="url(#a)"/>
+  <text x="840" y="230" class="t lbl">WSS</text>
+  <path d="M1062 290 V326" class="soft" marker-end="url(#g)"/>
+  <path d="M596 402 V424" class="soft" marker-end="url(#g)"/>
 
   <!-- request story -->
-  <g transform="translate(40 430)">
+  <g transform="translate(40 576)">
     <text x="0" y="0" class="t h">What one request does</text>
     <g class="t b">
-      <text x="0" y="30">1. You pick a model that an online node is actually serving and send a prompt.</text>
+      <text x="0" y="30">1. Pick a model that an online node is actually serving, then send a prompt from a browser or the API.</text>
       <text x="0" y="54">2. The coordinator places a worst-case credit hold and routes to the least busy eligible node.</text>
-      <text x="0" y="78">3. The node's agent calls its runtime (Ollama on loopback, or the Gemini API) and streams tokens back over its outbound socket.</text>
-      <text x="0" y="102">4. The receipt shows runtime-reported tokens and timings. You pay the measured cost (capped at the hold) and the owner earns the same.</text>
+      <text x="0" y="78">3. That node's agent calls its runtime (Ollama on loopback, an opted-in remote runtime, or Gemini) and streams tokens back over its outbound socket.</text>
+      <text x="0" y="102">4. The receipt shows runtime-reported tokens and timings with provenance; you pay the measured cost (capped at the hold) and the owner earns the same.</text>
     </g>
   </g>
 
   <!-- legend -->
-  <g transform="translate(900 430)">
+  <g transform="translate(880 576)">
     <text x="0" y="0" class="t h">Status</text>
     <rect x="0" y="16" width="34" height="20" rx="5" class="ok"/>
     <text x="46" y="31" class="t b">Built and verified end to end</text>
     <rect x="0" y="48" width="34" height="20" rx="5" class="cred"/>
-    <text x="46" y="63" class="t b">Built and tested; live run needs credentials</text>
+    <text x="46" y="63" class="t b">Built and tested; live run needs credentials or hardware</text>
     <rect x="0" y="80" width="34" height="20" rx="5" class="ext"/>
-    <text x="46" y="95" class="t b">Extension point, not built</text>
+    <text x="46" y="95" class="t b">Extension point or roadmap, not shipped</text>
     <text x="0" y="132" class="t s">Snowflake and Nimble: no integration.</text>
+  </g>
+
+  <!-- install footnote -->
+  <g transform="translate(40 726)">
+    <text x="0" y="0" class="t h">Three ways in</text>
+    <text x="0" y="26" class="t b">Host a network: the wheel plus the web bundle. Share compute: one binary and Ollama. Send prompts: a browser tab.</text>
+    <text x="0" y="50" class="t s">Downloads and SHA256SUMS.txt: github.com/roshaninfordham/opencomputemesh/releases</text>
   </g>
 </svg>

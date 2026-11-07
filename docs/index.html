@@ -30,6 +30,10 @@
     .card p { margin: 0; color: var(--muted); font-size: 16px; }
     .card p.status { margin-top: 10px; color: var(--ink); font-size: 14px; }
     .card code { font-size: 14px; }
+    .card pre { margin: 12px 0 0; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+    .card pre code { font-size: 12.5px; }
+    .card ol { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 16px; }
+    .card ol li { margin-bottom: 4px; }
     img.arch { width: 100%; border-radius: 16px; margin-top: 8px; }
     footer { margin-top: 48px; color: var(--muted); font-size: 15px; }
   </style>
@@ -52,6 +56,40 @@
     <a href="https://github.com/roshaninfordham/opencomputemesh/blob/main/docs/SPONSORS.md">Sponsor integrations</a>
   </div>
 
+  <h2>Install in three steps</h2>
+  <p class="lead">Two downloads and a browser tab. Hosting a network takes Python; contributing compute takes one binary and Ollama; sending prompts takes nothing.</p>
+  <div class="sponsors">
+    <div class="card"><h3>1. Host a network</h3><p>One machine, Python 3.12+ and <code>uv</code>. The wheel does not contain the web app, so unzip the bundle where the coordinator serves it from.</p>
+      <pre><code>curl -LO .../opencomputemesh-0.1.1-py3-none-any.whl
+curl -LO .../opencomputemesh-web-0.1.1.zip
+unzip opencomputemesh-web-0.1.1.zip -d web/dist
+uv tool install ./opencomputemesh-0.1.1-py3-none-any.whl
+OCM_WEB_DIST=./web/dist ocm serve</code></pre>
+      <p class="status">Prints <code>Join path: /join/&lt;code&gt;</code>. Binds 127.0.0.1:8000 unless you set <code>OCM_HOST</code>.</p></div>
+    <div class="card"><h3>2. Share your models</h3><p>Install Ollama, pull a model, and create an enrollment token in the web app under Nodes. Then run the binary for your OS. It dials out and opens no ports.</p>
+      <pre><code># macOS, Apple silicon (unsigned: clear quarantine)
+chmod +x ocm-node-0.1.1-aarch64-apple-darwin
+xattr -d com.apple.quarantine ocm-node-0.1.1-aarch64-apple-darwin
+ollama pull qwen2.5:1.5b
+./ocm-node-0.1.1-aarch64-apple-darwin \
+  --coordinator https://your-coordinator \
+  --models qwen2.5:1.5b --name my-laptop</code></pre>
+      <p class="status">Linux uses the musl binary, Windows the <code>.exe</code>, with the same flags.</p></div>
+    <div class="card"><h3>3. Join from any device</h3><p>Open <code>/join/&lt;code&gt;</code> on a phone, tablet or laptop and pick a nickname.</p>
+      <ol><li>No install, no account.</li><li>Joining shares no compute.</li><li>Capacity exists only while someone runs an agent with approved models.</li></ol>
+      <p class="status">Verify a host with <code>curl /healthz</code> and <code>ocm check-ledger</code>.</p></div>
+  </div>
+
+  <h2>What it does</h2>
+  <div class="sponsors">
+    <div class="card"><h3>Routes to hardware it does not own</h3><p>One coordinator picks an online node that actually serves the exact model, places a worst-case credit hold, and streams tokens back over that node's outbound socket.</p></div>
+    <div class="card"><h3>Receipts with provenance</h3><p>Token counts and timings come from the runtime, the coordinator or the browser, and say which. When a value was not reported it stays empty instead of being estimated.</p></div>
+    <div class="card"><h3>An append-only ledger</h3><p>Non-cash credits move per job, charges are capped at the hold the requester agreed to, and <code>ocm check-ledger</code> proves every job's debit and reward cancel out.</p></div>
+    <div class="card"><h3>Two agents, one contract</h3><p>Python <code>ocm-agent</code> and Rust <code>ocm-node</code> share flags, environment variables and state file. The Rust one is a single binary for macOS, Windows and Linux.</p></div>
+    <div class="card"><h3>Optional tiers, honest labels</h3><p>Ollama on loopback by default; an opted-in remote runtime or the Gemini API when the owner says so. Only the Tinfoil enclave can be attested, so contributor nodes are labelled <code>attested: false</code>.</p></div>
+    <div class="card"><h3>No prompt storage</h3><p>Prompts live in coordinator memory for the length of a job. They are never written to the database or logs, and the Sentry scrubbers drop bodies, cookies and tokens before anything leaves the machine.</p></div>
+  </div>
+
   <h2>Built with our sponsors</h2>
   <div class="sponsors">
     <div class="card"><h3>Gemini API</h3><p>A second runtime adapter beside local Ollama: a node owner runs <code>ocm-agent --runtime gemini</code> and shares Gemini models. Gemini's <code>usageMetadata</code> becomes the token counts on that node's receipts; the API key stays on the node.</p><p class="status">Unit-tested against the documented API format. Not run live: no API key was available.</p></div>
@@ -60,7 +98,7 @@
   </div>
 
   <h2>How it fits together</h2>
-  <img class="arch" src="images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator; node agents dial out and run models through pluggable runtime adapters (Ollama, Gemini API); SQLite ledger, optional Tiger Data metrics and Sentry monitoring">
+  <img class="arch" src="images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator that schedules jobs, records receipts and moves credits; Python and Rust node agents dial out to local Ollama, an opted-in remote runtime or the Gemini API; an optional Tinfoil attested tier and a Cognee memory seam sit behind the same interfaces">
 
   <footer>Open source under Apache-2.0, and for everyone. And that's OpenComputeMesh.</footer>
 </main>

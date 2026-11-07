@@ -31,6 +31,106 @@ Built for AI Engineer NYC 2026 (MLH). Sponsor tracks entered: Best Overall, Best
 
 Nothing here is code-signed yet. Release steps: `docs/RELEASING.md`.
 
+## Install
+
+There are two things to install and one of them is a browser tab.
+
+| You want to | Install | Needs |
+|---|---|---|
+| Host a network | Coordinator: the `opencomputemesh` wheel plus the web bundle | Python 3.12+ and [uv](https://docs.astral.sh/uv/) |
+| Share your own models | One `ocm-node` binary for your OS | [Ollama](https://ollama.com) with at least one model pulled |
+| Send prompts | Nothing | A browser |
+
+Everything is on the [v0.1.1 release](https://github.com/roshaninfordham/opencomputemesh/releases/tag/v0.1.1). Check `SHA256SUMS.txt` before running a download.
+
+### 1. Host a network (one machine, any OS)
+
+Any laptop, spare desktop or VPS that runs Python 3.12+. The wheel does not contain the web app, so
+put the released bundle where the coordinator serves it from:
+
+```bash
+curl -LO https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.1/opencomputemesh-0.1.1-py3-none-any.whl
+curl -LO https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.1/opencomputemesh-web-0.1.1.zip
+unzip opencomputemesh-web-0.1.1.zip -d web/dist
+uv tool install ./opencomputemesh-0.1.1-py3-none-any.whl
+OCM_WEB_DIST=./web/dist ocm serve
+```
+
+On Windows use `curl.exe` (or download both files in a browser) and `Expand-Archive -Path opencomputemesh-web-0.1.1.zip -DestinationPath web\dist`.
+
+`ocm serve` prints `Join path: /join/<code>`; `ocm join-code` prints it again at any time. It binds
+`127.0.0.1:8000` by default, so set `OCM_HOST=0.0.0.0` or put a tunnel in front of it before anyone
+else can reach it (see [docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md)). To run from source instead:
+
+```bash
+uv sync && scripts/build_web.sh && uv run ocm serve
+```
+
+### 2. Share your models (a contributor machine)
+
+Install Ollama and pull a model, get an enrollment token from the web app (**Nodes → Share my
+compute**), then run the binary for your platform. The agent dials out and opens no ports.
+
+| OS | Download |
+|---|---|
+| macOS, Apple silicon | `ocm-node-0.1.1-aarch64-apple-darwin` |
+| macOS, Intel | `ocm-node-0.1.1-x86_64-apple-darwin` |
+| Windows x64 | `ocm-node-0.1.1-x86_64-pc-windows-msvc.exe` |
+| Linux x64 (static) | `ocm-node-0.1.1-x86_64-unknown-linux-musl` |
+
+**macOS** (the binaries are not signed yet, so clear the quarantine flag first):
+
+```bash
+chmod +x ocm-node-0.1.1-aarch64-apple-darwin
+xattr -d com.apple.quarantine ocm-node-0.1.1-aarch64-apple-darwin
+ollama pull qwen2.5:1.5b
+./ocm-node-0.1.1-aarch64-apple-darwin --coordinator https://your-coordinator.example \
+  --models qwen2.5:1.5b --name my-laptop
+```
+
+**Linux** is the same with the musl binary (`chmod +x`, then the same flags).
+
+**Windows** (PowerShell; SmartScreen will warn because the binary is unsigned):
+
+```powershell
+ollama pull qwen2.5:1.5b
+.\ocm-node-0.1.1-x86_64-pc-windows-msvc.exe --coordinator https://your-coordinator.example --models qwen2.5:1.5b --name my-laptop
+```
+
+Either agent asks for the enrollment token at a hidden prompt, so it never lands in your shell
+history; set `OCM_ENROLLMENT_TOKEN` for unattended runs. After enrollment the credential is saved to
+`~/.opencomputemesh/node.json` (mode 0600) and later runs need no token. On a headless box, run it
+under tmux or a systemd unit of your own; no unit ships yet. The Python agent (`pip install
+opencomputemesh` from the same release, then `ocm-agent`) takes the identical flags and adds
+`--runtime gemini`.
+
+### 3. Join from any device
+
+Open `https://your-coordinator.example/join/<code>` on a phone, tablet or laptop and pick a
+nickname. That is the whole install. Joining in a browser only lets you send requests: it shares no
+compute.
+
+### Verify the install
+
+```bash
+curl -s http://127.0.0.1:8000/healthz    # {"status":"ok"}
+ocm check-ledger                          # ledger invariants; exit 0 means consistent
+```
+
+## Capabilities
+
+| It does | It does not |
+|---|---|
+| Route a prompt to a specific model on a machine someone else owns, and stream the tokens back. | Split one request across machines: no sharding, tensor or pipeline parallelism. |
+| Record a receipt with runtime-reported token counts and timings, each with its provenance, and leave a value empty rather than estimate it. | Invent numbers the runtime did not report, or measure per-job GPU time. |
+| Move non-cash OpenCompute Credits per job, with an append-only ledger, holds capped at what the requester agreed, and `ocm check-ledger` to verify it. | Handle real money, redemption, federation or horizontal scaling of the coordinator. |
+| Run two interchangeable agents: Python (`ocm-agent`) and Rust (`ocm-node`, single binary, Ollama only). | Attest a contributor's laptop: only the Tinfoil enclave tier can be attested, and contributor nodes are labelled `attested: false`. |
+| Serve an OpenAI-compatible `/v1/chat/completions` subset plus a browser app from the same origin. | Stream through the OpenAI endpoint (`stream: true` returns `400`), or expose the full OpenAI surface. |
+| Add runtimes behind one adapter: local Ollama, an opted-in remote runtime, and the Gemini API. | Support llama.cpp, vLLM or MLX today; those are extension points. |
+| Turn finished jobs into a labelled decision dataset with `ocm export-decisions`, containing no prompt or output text. | Claim model accuracy no one has measured: the dataset ships, the training run has not happened. |
+| Report node hardware (CPU, memory, GPUs with compute capability and driver) so routing can fail before dispatch rather than during it. | Use that inventory to verify what a node actually ran. |
+| Optionally copy terminal-job metrics to TimescaleDB and errors to Sentry, both scrubbed of prompts, cookies and tokens. | Store prompts or outputs anywhere durable, including logs. |
+
 ## Sponsor technologies
 
 All three integrations are optional and off by default. With none of them enabled the coordinator, agents and tests behave exactly as before. Status is stated as it is, not as it might be.
@@ -82,7 +182,7 @@ The comparison shown ran both nodes on the same Mac, so it demonstrates the mech
 
 ## Architecture at a glance
 
-<p align="center"><img src="docs/images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator; node agents dial out and run models through pluggable runtime adapters; SQLite ledger, Tiger Data metrics and Sentry monitoring" width="100%"></p>
+<p align="center"><img src="docs/images/architecture.svg" alt="Architecture: browsers and API clients talk to one coordinator that schedules jobs, records receipts and moves credits; Python and Rust node agents dial out to local Ollama, an opted-in remote runtime or Gemini; an optional Tinfoil attested tier and a Cognee memory seam sit behind the same interfaces" width="100%"></p>
 
 Each layer is a slot with one interface. The box borders show what is built and verified, what is built but needs credentials to verify live, and what is only an extension point.
 
@@ -177,11 +277,13 @@ flowchart LR
   C -. "Overview: Throughput (last hour)" .-> B
 
   C -. "errors via scrubbers<br/>(optional, SENTRY_DSN)" .-> S["Sentry"]
+  C -. "attested jobs<br/>(optional, Tinfoil)" .-> TF["Tinfoil enclave<br/>verified, not deployed"]
 
   subgraph NODE["Contributor machine (no inbound ports)"]
     A1["Python agent<br/>ocm-agent"] --> RA{{"RuntimeAdapter"}}
     A2["Rust agent<br/>ocm-node (Ollama only)"] --> O
     RA -- "default" --> O["Ollama<br/>127.0.0.1:11434"]
+    RA -. "--allow-remote-runtime<br/>(opt-in, unattested)" .-> RR["Remote runtime<br/>another machine"]
   end
   A1 -- "outbound wss /ws/node" --> C
   A2 -- "outbound wss /ws/node" --> C
