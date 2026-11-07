@@ -26,7 +26,7 @@ Stories delivered:
 - As Priya, I call `/v1/chat/completions` with API key, get usage + receipt.
 
 Outcomes: real routed/streamed/settled prompt with runtime_reported tokens;
-67 Python + 9 Rust tests; Tiger Data verified on TimescaleDB 2.30.2;
+83 Python + 61 Rust tests; Tiger Data verified on TimescaleDB 2.30.2;
 Gemini/Sentry built, not live-verified. Demo via Quick Tunnel in Chromium.
 
 Limits: single coordinator process + SQLite; in-memory sockets/limits;
@@ -272,6 +272,10 @@ Honest rules (borrowed from Laya's own limits page):
 | R1 | Labelled decision log: every routing decision with its outcome, exportable | The dataset is the product; everything else is plumbing |
 | R2 | Fine-tune a decision head on R1; publish the held-out delta | The only accuracy claim that counts |
 | R3 | Serve the head on the coordinator; decisions stay local | Milliseconds, no GPU, no enclave cost per decision |
+
+Status: R0 is partly shipped — both agents report CUDA compute capability and driver
+version, MLX is not built. R1 shipped as `ocm export-decisions`. R2 and R3 are not started,
+and no accuracy figure is claimed anywhere.
 
 MLX is Apple-silicon only and cannot run inside an enclave — there is no Apple hardware
 in a datacenter. It is our edge story: Mac inference, Mac-based private LoRA, Swift

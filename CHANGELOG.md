@@ -5,7 +5,18 @@ Semantic Versioning.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- README install instructions for every role and OS (coordinator wheel plus web bundle, one
+  `ocm-node` binary per platform, browser-only joining), a capabilities table that states what
+  the software does not do, and a redrawn architecture diagram covering the attested tier,
+  the opt-in remote runtime and the decision export.
+- `docs/RELEASING.md` explains the two failures that stop a tag release: an existing local tag,
+  and git prompting for a username with no credential helper.
+
+### Changed
+- `web/tsconfig.tsbuildinfo` is no longer tracked, so `npm run build` leaves the tree clean.
+- Documentation test counts now match the release checkout (83 Python, 61 Rust) instead of the
+  older 67/9 figures.
 
 ## [0.1.1] - 2026-11-07
 

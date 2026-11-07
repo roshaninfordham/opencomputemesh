@@ -23,7 +23,7 @@ Built for AI Engineer NYC 2026 (MLH). Sponsor tracks entered: Best Overall, Best
 
 | Piece | State |
 |---|---|
-| Coordinator, Python agent, web UI | Working. 83 tests pass, 3 skip (they need a live Ollama). |
+| Coordinator, Python agent, web UI | Working. 83 tests pass; 3 skip without the `tiger`/`sentry` extras or a live Ollama. |
 | `ocm-node` (Rust) | Working, including `--allow-remote-runtime`; binaries for macOS (ARM + Intel), Windows x64 and Linux are built by `.github/workflows/release.yml`. |
 | Tinfoil confidential tier | Gateway verified against a live enclave with the fingerprint pinned; container definition and publish path are in `tools/tinfoil-gateway`. Deploying it needs our own Tinfoil organization, so there is no public URL yet. |
 | Cognee memory | Built and queried locally with **no API key** (graph of 15 nodes from one sentence, recall in 0.1-0.2s). The client seam is tested; agent memory runs are not shipped. |
@@ -205,7 +205,7 @@ Snowflake and Nimble are not integrated.
 | Metrics sink (optional) | `ocm/timeseries.py` | Copies terminal-job metrics to Tiger Data / TimescaleDB when `OCM_TIMESCALE_URL` is set. |
 | Error monitoring (optional) | `ocm/observability.py` | Sentry with privacy scrubbers when `SENTRY_DSN` is set. |
 | Web app | `web/` (React + Vite) | Built to `web/dist` and served by the coordinator from the same origin. Join, run a model, view receipts, nodes, usage, the ledger and (when enabled) the throughput chart. |
-| Rust agent (alternative) | `crates/ocm-node` | A Rust node agent, binary `ocm-node`, with the same Ollama flags, environment variables and `<state-dir>/node.json` state file as `ocm-agent`. It supports the Ollama runtime only (no `--runtime`). It pins the rustls `ring` crypto provider at startup, which fixed a panic on the first `wss://` handshake. Build with `cargo build --release --manifest-path crates/ocm-node/Cargo.toml`. Covered by its own `cargo test` suite (9 tests) and verified end to end against the coordinator, including over a public `wss://` tunnel. |
+| Rust agent (alternative) | `crates/ocm-node` | A Rust node agent, binary `ocm-node`, with the same Ollama flags, environment variables and `<state-dir>/node.json` state file as `ocm-agent`. It supports the Ollama runtime only (no `--runtime`). It pins the rustls `ring` crypto provider at startup, which fixed a panic on the first `wss://` handshake. Build with `cargo build --release --manifest-path crates/ocm-node/Cargo.toml`. It shares `--allow-remote-runtime` with the Python agent, so it can front a runtime the owner hosts elsewhere, and every such receipt is labelled `runtime_scope: remote` with `attested: false`. Covered by its own `cargo test` suite (10 tests) and verified end to end against the coordinator, including over a public `wss://` tunnel. |
 
 ## Quick start
 
@@ -534,14 +534,17 @@ uv run pytest -q                                              # Python: coordina
 cargo test --manifest-path crates/ocm-node/Cargo.toml         # Rust agent
 ```
 
-Current counts (run on 2026-10-11 on the development Mac, with the `tiger` and `sentry` extras installed, Ollama 0.17.7 with `qwen2.5:1.5b`, and TimescaleDB 2.30.2 on `127.0.0.1:55432`): **67 passed, 0 skipped** in Python and **9 passed** in Rust.
+Current counts (v0.1.1, clean checkout with no extras, no Ollama and no TimescaleDB): **83 passed, 3 skipped** in Python, **51 passed** in the Rust workspace and **10 passed** in `ocm-node`. The table counts tests per file, 89 in total; a file that skips at import is collected as a single item, so a clean run collects 86. The three skips say exactly what is missing: `psycopg` plus a database (which holds back the four TimescaleDB tests), `sentry_sdk`, and Ollama on `127.0.0.1:11434`.
 
 | File | Tests | Covers |
 |---|---|---|
 | `tests/test_units.py` | 14 | NDJSON decoding, metric normalization, tariff rounding, ledger reserve, settle, release and reversal, append-only triggers, the state machine |
 | `tests/test_integration.py` | 15 | A real coordinator with fake WebSocket nodes: routing, streaming and settlement, idempotent replay, worker errors, retry on another worker after a disconnect, timeout and cancel, insufficient credits, pause and authorization, rejection of reports on foreign jobs |
-| `tests/test_agent.py` | 16 | Python node agent: loopback-only Ollama URL parsing (including userinfo tricks), enrollment-token reuse after a failed attempt, proxy settings ignored for runtime traffic |
+| `tests/test_agent.py` | 23 | Python node agent: loopback-only Ollama URL parsing (including userinfo tricks), enrollment-token reuse after a failed attempt, proxy settings ignored for runtime traffic |
+| `tests/test_export.py` | 4 | Decision export: terminal jobs only, node runtime tier
+  joined, no text fields anywhere, and `since`/`limit` bounds |
 | `tests/test_gemini.py` | 12 | Gemini adapter with a mocked transport: message conversion, SSE split mid-line, tokens, usage and thinking tokens, finish-reason mapping, API errors without the prompt, missing finish reason, cancellation, model listing, key only in the header, `--runtime gemini` requiring a key and announcing the cloud runtime |
+| `tests/test_memory.py` | 11 | Cognee memory seam: dataset-scoped client, a dataset name cannot escape its scope, empty input is refused, and failures plus `repr` never carry memory content |
 | `tests/test_timeseries.py` | 4 | Tiger Data sink against a real TimescaleDB: idempotent schema, hypertable rows, continuous aggregate with real-time aggregation, throughput endpoint, outage that neither fails nor delays jobs, disabled endpoint |
 | `tests/test_observability.py` | 5 | Sentry scrubbers on events, breadcrumbs and transactions, no-op without a DSN, end to end through the real SDK with an in-memory transport |
 | `tests/test_real_ollama.py` | 1 | Streams from a local Ollama and checks the runtime counters |
@@ -593,7 +596,7 @@ Known runtime quirk: with Ollama 0.17.7, `qwen3:4b` ignores `think: false` and e
 |---|---|
 | Technology | One-process FastAPI coordinator with a job state machine and append-only micro-OCC ledger ([ocm/hub.py](ocm/hub.py), [ocm/ledger.py](ocm/ledger.py)); two node agents, Python and Rust ([ocm/agent.py](ocm/agent.py), [crates/ocm-node](crates/ocm-node)); pluggable runtimes, Ollama and Gemini ([ocm/runtime.py](ocm/runtime.py)); TimescaleDB hypertable, continuous aggregate and compression ([ocm/timeseries.py](ocm/timeseries.py)); scrubbed Sentry ([ocm/observability.py](ocm/observability.py)). |
 | Design | Every sponsor integration is optional and isolated behind an existing seam (runtime adapter, a non-blocking metrics sink, CLI start-up hook). Metrics carry provenance and stay `null` when not reported ([How metrics are defined](#how-metrics-are-defined)). Outbound-only agents, loopback-only Ollama, no prompt storage ([Security model](#security-model)). Architecture in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). |
-| Completion | 67 Python tests and 9 Rust tests pass ([Testing](#testing)); CI on every push ([ci.yml](.github/workflows/ci.yml)); a web app served from the coordinator, an OpenAI-compatible endpoint, a demo runbook with preflight script ([docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md)); Tiger Data verified against a real TimescaleDB 2.30.2. Not verified live: Gemini (no key) and Sentry (no DSN). |
+| Completion | 83 Python tests pass (3 skip without extras or Ollama) and 61 Rust tests pass ([Testing](#testing)); CI on every push ([ci.yml](.github/workflows/ci.yml)); a web app served from the coordinator, an OpenAI-compatible endpoint, a demo runbook with preflight script ([docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md)); Tiger Data verified against a real TimescaleDB 2.30.2. Not verified live: Gemini (no key) and Sentry (no DSN). |
 | Learning | [What we learned](#what-we-learned), with the commits that record each fix (for example `e87e207` for the rustls provider, `2c76517` for disclosing capped settlements, `b50d4dd` for carrying `done_reason` through to `finish_reason`). |
 
 ## License

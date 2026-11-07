@@ -6,6 +6,7 @@ OpenComputeMesh v0.1 has these parts:
 - a SQLite database in WAL mode (`ocm/db.py`)
 - outbound-only node agents: Python `ocm-agent` (`ocm/agent.py`) and Rust `ocm-node` (`crates/ocm-node`)
 - a runtime adapter layer (`ocm/runtime.py`) between the Python agent and its model runtime: `OllamaAdapter` (loopback, the default) and `GeminiAdapter` (`--runtime gemini`). The Rust agent talks to Ollama directly.
+- a decision exporter (`ocm/decisions.py`, `ocm export-decisions`) that turns terminal jobs into labelled JSONL rows for the house router model, with no prompt or output text in any row
 - optional: a Tiger Data / TimescaleDB metrics sink (`ocm/timeseries.py`, `OCM_TIMESCALE_URL`)
 - optional: Sentry error monitoring with scrubbers (`ocm/observability.py`, `SENTRY_DSN`)
 
@@ -53,7 +54,7 @@ The coordinator normalizes `final_stats` with `normalize_ollama` (`ocm/metrics.p
 
 ## Rust agent
 
-`crates/ocm-node` is wire-compatible with `ocm/agent.py`: same messages, same flags for the Ollama runtime, same `<state-dir>/node.json`. It supports Ollama only (`runtime_name: "ollama"`). rustls 0.23 needs a process-level crypto provider before the first TLS handshake; `install_tls_provider()` installs `ring` at startup (pinned in `Cargo.toml`, no C toolchain needed). Without it the agent panicked on its first `wss://` connection.
+`crates/ocm-node` is wire-compatible with `ocm/agent.py`: same messages, same flags for the Ollama runtime, same `<state-dir>/node.json`. It supports Ollama only (`runtime_name: "ollama"`), and it shares `--allow-remote-runtime` with the Python agent: a runtime the owner hosts elsewhere is probed once per shared model, then every receipt from that node carries `runtime_scope: "remote"` and `attested: false`. rustls 0.23 needs a process-level crypto provider before the first TLS handshake; `install_tls_provider()` installs `ring` at startup (pinned in `Cargo.toml`, no C toolchain needed). Without it the agent panicked on its first `wss://` connection.
 
 ## Job state machine
 
@@ -148,7 +149,8 @@ Close codes: 4403 means the origin was rejected. 4401 means the ticket was missi
 `capabilities` holds:
 
 - `display_name`, `platform`, `architecture`, `cpu_model`, `logical_cpu_count`
-- memory totals and `gpus` (each labelled with its `source`)
+- memory totals and `gpus`: name, total memory, `cuda_compute_cap` and `driver_version` when `nvidia-smi` reports them, each labelled with its `source`
+- `runtime_scope` (`local` or `remote`), so a node fronting someone else's runtime can never be mistaken for a local one
 - `runtime_name` (`ollama` or `gemini`), `runtime_version`, `runtime_healthy`
 - `models`: `model_id`, `digest`, `runtime`, `family`, `parameter_size`, `quantization`, `size_bytes`
 - `max_concurrent_jobs`
