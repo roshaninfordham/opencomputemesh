@@ -85,9 +85,18 @@ jobs:
     name: Fuzz frame decoder and config parser (60s each)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # rust-toolchain.toml pins 1.99.0, and rustup lets that file win over the
+      # installed default, so the job would otherwise build libFuzzer's
+      # -Zsanitizer flags with a stable rustc. The variable also reaches the
+      # `cargo build` that cargo-fuzz spawns, which `cargo +nightly` would not.
+      RUSTUP_TOOLCHAIN: nightly
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
+        with:
+          # cargo-fuzz links the sanitizer build against musl on Linux.
+          targets: x86_64-unknown-linux-musl
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-fuzz
