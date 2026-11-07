@@ -76,7 +76,7 @@
   <rect x="360" y="428" width="472" height="94" rx="14" class="cred"/>
   <text x="384" y="458" class="t h">Confidential tier: Tinfoil gateway</text>
   <text x="384" y="482" class="t b">Stateless proxy to an attested enclave; fingerprint pinned.</text>
-  <text x="384" y="502" class="t s">Verified against a live enclave. Not deployed: needs our Tinfoil org.</text>
+  <text x="384" y="502" class="t s">Verified live. Not deployed: needs our Tinfoil org.</text>
 
   <!-- agents -->
   <rect x="880" y="66" width="362" height="104" rx="14" class="ok"/>
@@ -99,7 +99,7 @@
   <rect x="1070" y="330" width="172" height="66" rx="10" class="cred"/>
   <text x="1086" y="356" class="t b" font-weight="600">Gemini API</text>
   <text x="1086" y="374" class="t s">Python agent only,</text>
-  <text x="1086" y="390" class="t s">key stays on the node</text>
+  <text x="1086" y="390" class="t s">key stays on node</text>
 
   <rect x="880" y="412" width="362" height="76" rx="10" class="ok"/>
   <text x="896" y="436" class="t b" font-weight="600">OpenAI-compatible server --runtime openai</text>
@@ -147,7 +147,7 @@
     <rect x="0" y="16" width="34" height="20" rx="5" class="ok"/>
     <text x="46" y="31" class="t b">Built and verified end to end</text>
     <rect x="0" y="48" width="34" height="20" rx="5" class="cred"/>
-    <text x="46" y="63" class="t b">Built and tested; live run needs credentials or hardware</text>
+    <text x="46" y="63" class="t b">Built and tested; live needs a key or hardware</text>
     <rect x="0" y="80" width="34" height="20" rx="5" class="ext"/>
     <text x="46" y="95" class="t b">Extension point or roadmap, not shipped</text>
     <text x="0" y="132" class="t s">Snowflake and Nimble: no integration.</text>
