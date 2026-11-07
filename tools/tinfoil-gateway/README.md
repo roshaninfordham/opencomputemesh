@@ -13,9 +13,36 @@ cargo run          # listens on 127.0.0.1:8787
 | `TINFOIL_API_KEY` | required | Upstream credential. Never sent to a client. |
 | `TINFOIL_UPSTREAM` | `inference.tinfoil.sh` | The one enclave host that will be trusted. |
 | `TINFOIL_ROUTER_REPO` | `tinfoilsh/confidential-model-router` | Code measurement to verify against. |
-| `GATEWAY_BIND` | `127.0.0.1:8787` | Listen address. Keep it loopback unless a coordinator fronts it. |
+| `GATEWAY_BIND` | `127.0.0.1:8787` | Listen address. A non-loopback bind requires `GATEWAY_TOKEN`. |
+| `GATEWAY_TOKEN` | unset | Caller credential, sent as `Authorization: Bearer …`. |
+
+A non-loopback bind without `GATEWAY_TOKEN` is a startup error, not a warning:
+that configuration is an open proxy spending a paid upstream key.
 
 Routes: `POST /v1/{path}` (and `GET` for `/v1/models`), plus `GET /healthz`.
+
+Pass `--healthcheck` to probe a running instance and exit non-zero if it is not
+healthy. The image is distroless, so there is no curl to call from a container
+healthcheck.
+
+## Running it as a Tinfoil Container
+
+The image is built to run inside an enclave, which turns the gateway into an
+OpenAI-compatible endpoint nobody has to install:
+
+```bash
+docker buildx build --platform linux/amd64 -t ocm-tinfoil-gateway tools/tinfoil-gateway
+```
+
+`tinfoil-config.yml` is the container definition: 2 CPU / 8 GiB, an egress
+allowlist for the four hosts the verifier needs, both credentials as secrets, and
+`shim.paths` limited to `/healthz` and `/v1/*`. It is a template — the image must
+be pinned by digest before release. See [PUBLISHING.md](PUBLISHING.md) for the
+full path to a running instance and what to check before announcing it.
+
+What the enclave does and does not prove: it attests *this process* and keeps the
+operator's upstream key out of reach. It says nothing about contributor hardware;
+that is the community tier's problem, not the container's.
 
 ## The design decision that matters
 
@@ -27,13 +54,19 @@ caller direct our key at any Tinfoil-hosted enclave; a single pin cannot be stee
 If verification fails, the process exits. There is no flag to continue unverified,
 because a downgrade path would be the vulnerability this exists to prevent.
 
+The same rule governs exposure: binding a non-loopback address without
+`GATEWAY_TOKEN` is a startup error, not a warning. An unauthenticated copy of this
+process is a public proxy holding a paid upstream key.
+
 ## What it does and does not protect
 
 - **Does**: keep the upstream key server-side, refuse cross-origin redirection,
   forward bodies byte-for-byte so an EHBP client's plaintext only exists inside the
   enclave, and request usage metrics for blind billing.
-- **Does not**: authenticate callers, rate-limit, or hold budgets. Those belong to
-  the coordinator, which will host this code once it exists in Rust.
+- **Does not** authenticate per caller or hold budgets: `GATEWAY_TOKEN` is one
+  shared bearer, so every holder spends the operator's key. Per-caller
+  credentials and budgets belong to the coordinator, which will host this code
+  once it exists in Rust.
 - **Does not** verify per-request attestation: verification happens at connect time
   and pins the TLS certificate, which is the SDK's model.
 

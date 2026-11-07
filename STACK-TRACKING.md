@@ -174,3 +174,25 @@ Spec: `docs/superpowers/specs/2026-11-07-confidential-tier-tinfoil.md`.
    reconcile; a disconnect still bills.
 5. Coordinator-in-enclave is blocked on the Rust coordinator and on persistent
    storage (the container has no disk by default), not on Tinfoil.
+
+---
+
+# Confidential tier — P1 container packaging
+
+Artifacts: `tools/tinfoil-gateway/{Dockerfile,.dockerignore,tinfoil-config.yml,PUBLISHING.md}`.
+
+| Check | Result |
+|---|---|
+| `cargo fmt --check` (tool crate) | clean |
+| `cargo clippy --all-targets -- -D warnings` | 0 errors |
+| `cargo test` | 4 passed, 0 failed |
+| public bind without `GATEWAY_TOKEN` | exit 1, refusal message |
+| `/v1/models` with no / wrong / right token | 401 / 401 / 200 |
+| `--healthcheck` | exit 0 |
+| upstream key occurrences in logs | 0 |
+| `tinfoil-config.yml` parses; allowlist, shim paths, secrets | verified |
+
+Not run: `docker build` and a container run. No Docker daemon is reachable in this
+environment (socket is root-only and `no_new_privs` blocks sudo). Base-image tags
+`rust:1.99-slim` and `gcr.io/distroless/cc-debian12:nonroot` were confirmed to exist
+with `docker manifest inspect`, which needs no daemon.

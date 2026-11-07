@@ -1,0 +1,55 @@
+# Tinfoil Container definition for the OCM gateway.
+#
+# This is a template, not a deployable file: `image` must be pinned by digest so
+# the measurement in the attestation corresponds to an image anyone can rebuild
+# from this Dockerfile. `PIN_ME` is rejected by the platform, which is what we
+# want — a placeholder must never reach a running enclave.
+#
+# Publishing steps: tools/tinfoil-gateway/PUBLISHING.md
+cvm-version: "0.14.10" # keep current: https://github.com/tinfoilsh/cvmimage/releases
+cpus: 2
+memory: 8192
+
+# Egress is closed by default. The gateway is useless without these: it proxies
+# to one enclave and must verify that enclave's attestation before serving.
+networks:
+  upstream:
+    egress: allowlist
+    allow:
+      - inference.tinfoil.sh # the one enclave we proxy to
+      - atc.tinfoil.sh # attestation transparency service
+      - kds-proxy.tinfoil.sh # AMD KDS proxy: VCEK cert chain for SEV-SNP
+      - github-proxy.tinfoil.sh # attestation bundle for the measured repo
+
+containers:
+  - name: gateway
+    image: "ghcr.io/opencomputemesh/tinfoil-gateway:0.1.0@sha256:PIN_ME"
+    networks: [upstream]
+    env:
+      # A container must listen on all interfaces to be reachable by the shim.
+      # Safe because the bind is public *only* with GATEWAY_TOKEN set: without
+      # it the process refuses to start on a non-loopback address.
+      - GATEWAY_BIND: "0.0.0.0:8787"
+      - TINFOIL_UPSTREAM: "inference.tinfoil.sh"
+      - TINFOIL_ROUTER_REPO: "tinfoilsh/confidential-model-router"
+    secrets:
+      # Operator's upstream credential. Named here, never written here.
+      - TINFOIL_API_KEY
+      # Caller credential. Without it the container would spend the key for anyone.
+      - GATEWAY_TOKEN
+    healthcheck:
+      # The image is distroless: no shell, no curl. The binary checks itself.
+      test: ["CMD", "/usr/local/bin/gateway", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+
+shim:
+  upstream-port: 8787
+  # Only these paths are reachable from outside the enclave. `/healthz` is
+  # unauthenticated by design so the platform can probe it; it reveals the
+  # enclosure fingerprint and nothing else.
+  paths:
+    - /healthz
+    - /v1/*

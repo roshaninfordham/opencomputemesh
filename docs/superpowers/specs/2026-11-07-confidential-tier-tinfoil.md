@@ -134,7 +134,35 @@ Budget enforcement has a real subtlety that must not be hand-waved:
   inventing a tariff: we can charge a margin, but we should not fabricate a price
   for a cost we did not incur and cannot observe.
 
-## 7. Deploying OCM itself as a Tinfoil Container (deferred, deliberately)
+## 7. Deploying OCM itself as a Tinfoil Container
+
+There are two different things to containerise, and conflating them is how the
+schedule slips.
+
+### P1.5 status: the stateless gateway is packaged
+
+`tools/tinfoil-gateway` has a `Dockerfile` (non-root, distroless, no volume) and a
+`tinfoil-config.yml` template; `PUBLISHING.md` is the operator path. The gateway is
+the right first target because it is stateless: no ledger, so no encrypted volume,
+no unlock path, no migration. Three things had to change to make it containerisable:
+
+- **Egress is closed by default.** The SDK needs `inference.tinfoil.sh`,
+  `atc.tinfoil.sh`, `kds-proxy.tinfoil.sh` and `github-proxy.tinfoil.sh`; they are
+  allowlisted by name. If Tinfoil adds a host, boot fails closed rather than
+  degrading quietly — an outage that is visible beats a verification that is not.
+- **A public bind needs a credential.** The container must listen on `0.0.0.0`, so
+  `GATEWAY_TOKEN` is mandatory for any non-loopback bind and the process refuses to
+  start without it. This is what makes exposure safe enough to hand out.
+- **Distroless has no shell**, so `--healthcheck` probes `/healthz` from inside the
+  binary instead of relying on `curl`.
+
+Not verified here: no Docker daemon was reachable while this was written, so the
+image was validated by building the same target with `cargo build --release` and by
+smoke-testing the binary's gate (401 without a token, 401 on a wrong token, 200 on
+the right one). The image itself still needs one `docker build` plus a container run
+before it is called tested.
+
+### The coordinator: still deferred, deliberately
 
 The symmetric move — run the coordinator in an enclave so users verify *our*
 routing code, not just Tinfoil's — is the natural sequel and must not be promised
@@ -161,7 +189,7 @@ Revisit once the Rust coordinator serves `/v1` end to end.
 | P1 | Attested backend: verify, then forward EHBP bytes | A real completion through the coordinator whose request body the coordinator cannot decrypt; enclave URL allowlist enforced |
 | P2 | Blind metering: reserve then reconcile, per-key budget under encryption | Over-budget key stops mid-stream at the reserve, settles on trailer; disconnect still bills |
 | P3 | Receipt `execution` block, client-verified flag | Receipt shows fingerprints; community receipts say `community` explicitly |
-| P4 | Coordinator as a Tinfoil Container | Users verify the coordinator's own measurement |
+| P4 | Gateway as a Tinfoil Container | An attested, no-install OpenAI-compatible endpoint; coordinator container deferred to v0.4 |
 
 ### P1 status: shipped as `tools/tinfoil-gateway`
 
@@ -181,9 +209,14 @@ Verified against the live service:
   is dropped rather than forwarded.
 
 Deliberately not done yet: no `/attestation` endpoint (needed only by the
-JavaScript, Python and Swift clients), no trailer forwarding (so streaming usage
-is not yet billable), and no caller authentication — which is why it binds loopback
-and must not be exposed publicly in this form.
+JavaScript, Python and Swift clients) and no trailer forwarding (so streaming usage
+is not yet billable).
+
+Caller authentication is one shared `GATEWAY_TOKEN`, not per-caller accounting. It
+is enough to stop a public bind from being an open proxy, and not enough to sell
+access: every holder spends the operator's key from one budget. Until the
+coordinator issues per-caller credentials, a hosted instance is private by
+invitation.
 
 ## 9. Failure modes and responses
 

@@ -7,7 +7,10 @@
 //!
 //! Fail closed: if verification fails, nothing is served.
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
 use axum::{
     Router,
@@ -45,6 +48,30 @@ struct App {
     /// Verified at startup; holds the attestation-pinned client.
     secure: SecureClient,
     enclave_fingerprint: String,
+    /// Caller credential. `None` only on a loopback bind.
+    gate: Option<Vec<u8>>,
+}
+
+/// Compare without an early exit, so a wrong token costs the same time as a
+/// wrong token with a matching prefix.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Refuse to serve a non-loopback address without a caller credential.
+///
+/// This is the difference between a local tool and an open proxy holding a paid
+/// upstream key. A token is the minimum bar; per-caller budgets belong to the
+/// coordinator that will host this.
+fn exposure_is_safe(bind: SocketAddr, token: Option<&str>) -> bool {
+    bind.ip().is_loopback() || token.is_some_and(|t| !t.is_empty())
 }
 
 /// The host of an `https` URL, or `None` if the URL is unusable as an origin.
@@ -114,6 +141,17 @@ async fn forward(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    if let Some(expected) = &app.gate {
+        let presented = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "));
+        let ok = presented.is_some_and(|p| constant_time_eq(p.as_bytes(), expected));
+        if !ok {
+            return error(StatusCode::UNAUTHORIZED, "missing or invalid gateway token");
+        }
+    }
+
     if let Some(raw) = headers.get("x-tinfoil-enclave-url") {
         let pinned = host_of(raw.to_str().unwrap_or_default()).as_deref() == Some(app.pinned_host.as_str());
         if !pinned {
@@ -162,17 +200,49 @@ async fn forward(
     }
 }
 
+/// `--healthcheck` exists for container runtimes: the image is distroless, so
+/// there is no curl to shell out to, and the check must work without the upstream
+/// credential being read.
+fn healthcheck(port: u16) -> std::io::Result<()> {
+    use std::io::{Read, Write};
+
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
+    let mut stream = std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(3))?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(3)))?;
+    stream.write_all(b"GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n")?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    if response.starts_with("HTTP/1.") && response.contains(" 200 ") {
+        Ok(())
+    } else {
+        Err(std::io::Error::other("healthz did not return 200"))
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let bind: SocketAddr = std::env::var("GATEWAY_BIND")
+        .unwrap_or_else(|_| "127.0.0.1:8787".to_owned())
+        .parse()?;
+    if std::env::args().any(|arg| arg == "--healthcheck") {
+        healthcheck(bind.port())?;
+        return Ok(());
+    }
+
     let host = std::env::var("TINFOIL_UPSTREAM").unwrap_or_else(|_| DEFAULT_HOST.to_owned());
     let repo = std::env::var("TINFOIL_ROUTER_REPO").unwrap_or_else(|_| DEFAULT_REPO.to_owned());
     let key =
         std::env::var("TINFOIL_API_KEY").map_err(|_| "TINFOIL_API_KEY is not set; source your .env first")?;
     let auth = HeaderValue::from_str(&format!("Bearer {key}"))
         .map_err(|_| "TINFOIL_API_KEY is not valid in an HTTP header")?;
-    let bind: SocketAddr = std::env::var("GATEWAY_BIND")
-        .unwrap_or_else(|_| "127.0.0.1:8787".to_owned())
-        .parse()?;
+    let gate = std::env::var("GATEWAY_TOKEN").ok().filter(|t| !t.is_empty());
+    if !exposure_is_safe(bind, gate.as_deref()) {
+        return Err(
+            "refusing to listen on a non-loopback address without GATEWAY_TOKEN: \
+             an unauthenticated proxy would spend the upstream key for anyone"
+                .into(),
+        );
+    }
 
     // Fail closed: an unverifiable enclave means no gateway at all.
     let mut secure = SecureClient::new(host.as_str(), repo.as_str(), key);
@@ -189,6 +259,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         auth,
         secure,
         enclave_fingerprint,
+        gate: gate.map(String::into_bytes),
     });
 
     let router = Router::new()
@@ -225,6 +296,24 @@ mod tests {
         assert_eq!(host_of("http://inference.tinfoil.sh"), None);
         assert_eq!(host_of("https://user:pw@inference.tinfoil.sh"), None);
         assert_eq!(host_of("not a url"), None);
+    }
+
+    #[test]
+    fn tokens_match_only_exactly() {
+        assert!(constant_time_eq(b"s3cret", b"s3cret"));
+        assert!(!constant_time_eq(b"s3cret", b"s3crez"));
+        assert!(!constant_time_eq(b"s3cret", b"s3cret-longer"));
+        assert!(!constant_time_eq(b"", b"x"));
+    }
+
+    #[test]
+    fn refuses_to_expose_without_a_token() {
+        let loopback: SocketAddr = "127.0.0.1:8787".parse().unwrap();
+        let public: SocketAddr = "0.0.0.0:8787".parse().unwrap();
+        assert!(exposure_is_safe(loopback, None));
+        assert!(!exposure_is_safe(public, None));
+        assert!(!exposure_is_safe(public, Some("")));
+        assert!(exposure_is_safe(public, Some("a-real-token")));
     }
 
     #[test]

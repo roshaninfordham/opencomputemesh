@@ -180,7 +180,7 @@ from an accounting record into execution evidence.
 | P1 | Attested backend: SDK verification, EHBP byte forwarding, enclave URL allowlist | Fail closed is the whole feature |
 | P2 | Blind metering: reserve-then-reconcile budgets, trailer settlement | Billing cannot depend on reading the body |
 | P3 | Receipt `execution` block and `community` labelling | Evidence must reach the artifact users keep |
-| P4 | Coordinator deployed as a Tinfoil Container | Then users verify our code, not only the model host's |
+| P4 | Stateless gateway packaged as a Tinfoil Container | No-install access is real as soon as the proxy itself is attested; a coordinator mid-rewrite would be built twice |
 
 ### Outcomes
 

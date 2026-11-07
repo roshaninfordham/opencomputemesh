@@ -16,6 +16,12 @@ Semantic Versioning.
 - `tools/tinfoil-probe`: reproduces enclave attestation verification and prints the measurement.
 - `tools/tinfoil-gateway`: P1 attested gateway that pins one verified enclave and forwards opaque
   bodies, refusing any other origin and any unverified start.
+- `tools/tinfoil-gateway`: container packaging (`Dockerfile`, `tinfoil-config.yml`, publish path) so
+  the gateway can run as an attested Tinfoil Container and callers install nothing.
+
+### Changed
+- `tools/tinfoil-gateway`: a non-loopback bind now requires `GATEWAY_TOKEN` and the process exits
+  without it; `--healthcheck` lets a distroless container probe itself.
 
 ## [0.1.0] - 2026-10-11
 
