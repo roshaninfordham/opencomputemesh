@@ -19,6 +19,18 @@ Opening the coordinator URL does not share anyone's compute. A browser that join
 
 Built for AI Engineer NYC 2026 (MLH). Sponsor tracks entered: Best Overall, Best Use of Gemini API, Best Use of Tiger Data, Best Use of Sentry. Details: [Sponsor technologies](#sponsor-technologies), the deep dive in [docs/SPONSORS.md](docs/SPONSORS.md), and the [judging criteria map](#judging-criteria-map).
 
+## Status: what runs today
+
+| Piece | State |
+|---|---|
+| Coordinator, Python agent, web UI | Working. 83 tests pass, 3 skip (they need a live Ollama). |
+| `ocm-node` (Rust) | Working, including `--allow-remote-runtime`; binaries for macOS (ARM + Intel), Windows x64 and Linux are built by `.github/workflows/release.yml`. |
+| Tinfoil confidential tier | Gateway verified against a live enclave with the fingerprint pinned; container definition and publish path are in `tools/tinfoil-gateway`. Deploying it needs our own Tinfoil organization, so there is no public URL yet. |
+| Cognee memory | Built and queried locally with **no API key** (graph of 15 nodes from one sentence, recall in 0.1-0.2s). The client seam is tested; agent memory runs are not shipped. |
+| House decision model | The dataset ships (`ocm export-decisions`); training has not been run, and no accuracy is claimed. |
+
+Nothing here is code-signed yet. Release steps: `docs/RELEASING.md`.
+
 ## Sponsor technologies
 
 All three integrations are optional and off by default. With none of them enabled the coordinator, agents and tests behave exactly as before. Status is stated as it is, not as it might be.
