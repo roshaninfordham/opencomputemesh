@@ -6,6 +6,9 @@ Semantic Versioning.
 ## [Unreleased]
 
 ### Changed
+- Diagrams redrawn around role rather than vendor: colour now marks core, runtime, attested tier,
+  memory and data, and each of SIE, Tinfoil and Cognee states what it is for, how it is reached,
+  what was verified and what it cannot do. The banner drops "peer-to-peer" for what actually happens.
 - Repository trimmed to what a reader needs: internal planning notes, stack tracking, the roadmap and
   the demo runbook are gone, along with the video build directory and the 4.9 MB preview GIF. The
   README (616 lines) and landing page now say the same things in a fraction of the space.

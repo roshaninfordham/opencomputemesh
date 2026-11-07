@@ -89,7 +89,7 @@ Check a host with `curl /healthz` and `ocm check-ledger`. The OpenAI-compatible 
 
 ## How a request moves
 
-<p align="center"><img src="docs/images/architecture.svg" alt="Architecture: one coordinator schedules jobs, records receipts and moves credits; node agents dial out and run models through one runtime interface covering Ollama, any OpenAI-compatible server, an opted-in remote runtime and Gemini; the optional Tinfoil attested tier sits behind the coordinator, and Cognee memory is an owner-hosted seam outside it" width="100%"></p>
+<p align="center"><img src="docs/images/architecture.svg" alt="Architecture: requesters send a prompt to one coordinator, which holds credits, routes to a contributor machine that dials out, and settles a receipt; runtimes are Ollama, Superlinked SIE or any OpenAI-compatible server, Gemini, or an opted-in remote runtime; Tinfoil is the attested tier and Cognee an owner-hosted memory seam outside the request path" width="100%"></p>
 
 1. A prompt arrives from the browser or the API; the coordinator picks an online node that actually
    serves that exact model, least busy first.
