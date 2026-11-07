@@ -10,3 +10,4 @@ Every dependency must earn its place. Default features are disabled unless noted
 | proptest (dev) | ocm-proto, ocm-sched | Property tests for protocol and scheduler invariants |
 | ed25519-dalek | ocm-proto | 3.0.0 has no `std` feature; signing and verification use `fast` + `zeroize` (no `alloc` needed) |
 | libfuzzer-sys (fuzz only) | fuzz/ | Coverage-guided fuzzing of the frame decoder in CI |
+| (none) | ocm-config | Deliberately dependency-free: the config language needs only `std` |

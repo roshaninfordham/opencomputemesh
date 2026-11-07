@@ -190,6 +190,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocm-config"
+version = "0.2.0-alpha.0"
+
+[[package]]
 name = "ocm-proto"
 version = "0.2.0-alpha.0"
 dependencies = [

@@ -24,6 +24,9 @@ Purpose: prevent spec/plan/code/docs from drifting as parallel work lands.
 5. Privacy: no prompts/outputs in DB, logs, TimescaleDB, or Sentry (run scrub tests).
 6. Docs: README + ARCHITECTURE + config table + `.env.example` + CLI help updated
    in the same PR if behavior changed. Plan checkbox ticked in the same branch.
+7. Config surface: a new directive needs its parser case, its validation rule,
+   a fixture in `crates/ocm-config/tests/fixtures/`, and a row in the directive
+   reference. `ocm -t` must accept `examples/ocm.conf` at all times.
 
 ## Staleness sweep (weekly or pre-release)
 

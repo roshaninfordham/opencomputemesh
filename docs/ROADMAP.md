@@ -96,6 +96,50 @@ Outcome: install/enroll/share/pause works macOS+Windows+Linux.
 Outcomes: tagged releases + installers + SHA-256; staleness check passes;
 Python removed; hackathon framing removed (neutral adapters stay).
 
+## Phase 1.5 — v0.2.5 Edge config and sharing [NEXT]
+
+Goal: publish compute with one URL, point any agent at it, and run free open
+source models yourself. Declarative, nginx-style: one config file, test it,
+reload it.
+
+Borrowed from nginx: a single text config with nested contexts, `include`,
+a test mode (`ocm -t`), a reload signal, upstream pools, route matching and
+rate limits. Spec: `docs/superpowers/specs/2026-11-07-edge-config-and-sharing.md`.
+
+### Stories
+
+- As Sam, I write one `ocm.conf`, run `ocm -t`, then `ocm serve`, and the whole
+  network (port, models, tokens, share links, limits) is described by that file.
+- As Sam, I run `ocm share --pool small --for 24h` and get one URL. I send it to
+  a friend; opening it shows the exact one-line command to share their GPU.
+- As Priya, I create a `token` with an allowlisted model set, an OCC budget and a
+  rate limit, then point Claude Code / Cursor / LangChain at `/v1` with that key.
+- As Dev, I run `ocm models add llama3.2:3b`; the mesh pulls it, pins the digest
+  and starts serving it locally, free and open source.
+- As Sam, I edit `ocm.conf` and run `ocm reload`; new jobs use the new policy
+  while in-flight streams finish on the old one.
+
+### Priorities (build in this order)
+
+| P | Work | Why first |
+|---|---|---|
+| P0 | `ocm-config`: lexer, parser, AST, validation, `ocm -t` semantics | Everything else is config-driven; pure Rust, fully testable |
+| P1 | `include` resolution: cycle and depth guards, glob expansion | Lets a network grow past one file |
+| P2 | Share URLs: `/share/<slug>` onboarding, single-use, expiry, `max_nodes`, grant | The "one URL to share compute" outcome |
+| P3 | Agent tokens: model allowlist, budget, rate, per-key usage | The "share to my AI agents" outcome |
+| P4 | Free OSS models: catalog, pull plan, digest pinning, `ocm models add\|list\|rm` | The "use free models by themselves" outcome |
+| P5 | Hot reload: `ocm reload`, config version stamped on receipts | Operations without restarts |
+| P6 | Config-driven limits replacing `OCM_*` sprawl (env stays as overrides) | Removes setup friction |
+
+### Outcomes
+
+- `ocm -t` reports unknown directives, bad values, duplicate names, undefined
+  pool references and include cycles with `file:line:column`.
+- One URL onboards a contributor end to end, no terminal archaeology.
+- An agent key cannot exceed its model allowlist, budget or rate.
+- A reload changes routing policy without dropping an active stream.
+- A working network no longer requires dozens of env vars.
+
 ## Phase 2 — v0.3 Beyond one room [PLANNED]
 
 - As Sam with 200 users, I run Postgres primary, not SQLite.
@@ -152,7 +196,8 @@ Outcomes: fresh VPS to public mesh <10min from docs; 30-day soak with
 
 ## Rust-only rule
 
-Backend/systems are Rust only. Python coordinator/agent are v0.1 legacy,
+Backend/systems are Rust only. Edge configuration is declarative (`ocm.conf`),
+not flags-and-env only. Python coordinator/agent are v0.1 legacy,
 deleted at v0.2 cutover. Web stays React+TS but embedded in the Rust binary.
 Details: `docs/RUST-POLICY.md`. Drift checks: `docs/DRIFT-GUARD.md`.
 

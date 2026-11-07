@@ -9,6 +9,7 @@ Semantic Versioning.
 - Rust workspace with strict quality gates.
 - `ocm-proto`: protocol v2 frames with Ed25519 signing of result frames.
 - `ocm-sched`: load manager with expected-completion scoring and power-of-two-choices.
+- `ocm-config`: nginx-style declarative configuration language with full validation (`ocm -t` semantics).
 
 ## [0.1.0] - 2026-10-11
 

@@ -39,3 +39,59 @@ plus CI (`workspace` + `deny` + `fuzz` jobs).
 ## Next
 
 Tasks 6 (`pick` + 50µs budget) and 7 (`Breaker` + `Admission`) remain before the full Plan 1 gate.
+
+---
+
+# Plan 2 — v0.2.5 edge config and sharing
+
+Branch: `feat/edge-config` (from `release/plan1`). Spec
+`docs/superpowers/specs/2026-11-07-edge-config-and-sharing.md`, plan
+`docs/superpowers/plans/2026-11-07-v0.2-plan-2-config.md`.
+
+## Status
+
+| P | Task | State | Local gate |
+|---|---|---|---|
+| P0 | 1. `ocm-config` language | **done** | PASS |
+| P1 | 2. include resolution | not started | - |
+| P2 | 3. share URLs | not started | - |
+| P3 | 4. agent tokens | not started | - |
+| P4 | 5. free OSS models | not started | - |
+| P5 | 6. hot reload | not started | - |
+| P6 | 7. config over env | not started | - |
+
+## Gate evidence (local, Rust 1.99.0)
+
+- `cargo fmt --all --check`: clean
+- `cargo clippy --workspace --all-targets -- -D warnings`: 0 errors
+- `cargo test --workspace`: config 22 (parse 11, validate 11), frame 7, body 4,
+  sign 4, score 6 = **43 passed**, 0 failed
+
+## Defects found and fixed during review
+
+1. **`grant 100;` was rejected as malformed** — the share parser read `grant`
+   through the one-argument path while validation expected two. Rewritten as an
+   explicit two-argument branch before the one-argument `match`.
+2. **`lex` was 133 lines in one function** — clippy `too_many_lines`. Split into
+   a `Lexer` cursor with `word`/`quoted`/`punct`/`advance` helpers.
+3. **`parse_network` returned `Option` it never produced** — `unnecessary_wraps`.
+4. **`match` used where `if let`/`if` reads better** — `single_match_else` and
+   `match_single_binding` on `parse_pool`, `parse_route`, `parse_share`.
+5. **`assigning_clones`** on `allow_models` and `route.path` — `clone_from` /
+   `clone_into`.
+6. **EOF error pointed at the last argument** — a missing `;` reported column 8
+   of `listen 8080` instead of the directive's own column 1. Now anchored to the
+   directive start.
+7. **Doc drift caught while writing the spec**: `docs/ARCHITECTURE.md` showed a
+   `pool` nested inside a `route` and claimed `include` was expanded in P0. Both
+   corrected (include is parsed and retained only).
+
+## Review focus
+
+- [x] Errors never echo config contents (only directive names and shapes)
+- [x] `validate()` returns every problem, not the first (fixture asserts >= 3)
+- [x] Depth limit rejects >32 nested blocks without a stack overflow
+- [x] Duplicate `network` is rejected; duplicate pools/tokens/shares/routes too
+- [x] `route.pool` must resolve to a defined pool
+- [x] `examples/ocm.conf` is the acceptance fixture for `ocm -t`
+- [ ] Include resolution (P1) — deliberately deferred, documented as such

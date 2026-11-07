@@ -235,3 +235,70 @@ On startup (`Hub.recover_after_restart`):
 - The tariff row for the current settings is inserted if it is missing, and the network's join code hash and name are updated from settings.
 
 While running, a sweeper checks every 5 seconds for nodes whose last heartbeat is older than `OCM_NODE_HEARTBEAT_TTL_SECONDS`. It closes their sockets (4008) and marks them offline. When a socket closes normally, the node becomes ineligible immediately and is shown `OFFLINE` after `OCM_NODE_OFFLINE_GRACE_SECONDS`, unless it reconnects first.
+
+## Declarative edge configuration
+
+v0.2.5 replaces flag-and-env sprawl with one nginx-style config file. The shape
+is deliberate: a person who has run nginx should be able to read `ocm.conf`.
+
+```nginx
+network "Homelab mesh" {
+    listen 8080;
+    data_dir /var/lib/ocm;
+    demo_mode on;
+}
+
+# Recognised today; glob expansion lands with P1.
+include conf.d/*.conf;
+
+token "agents" {
+    allow_models qwen2.5:1.5b llama3.2:3b;
+    budget 500 OCC;
+    rate 60/min;
+}
+
+share "friends" {
+    enroll node;
+    expires 24h;
+    grant 100 OCC;
+    max_nodes 5;
+}
+
+pool "small" {
+    model qwen2.5:1.5b;
+    policy expected_ms;
+}
+
+route "openai" {
+    path /v1;
+    pool small;
+    auth token;
+}
+```
+
+Directive semantics map onto nginx concepts: `network` is the `http`/main
+context, `pool` is an `upstream` block, `route` is a `server`/`location`, `token`
+is `auth_basic` plus `limit_req`, `include` is `include`, `ocm -t` is
+`nginx -t`, and `ocm reload` is `nginx -s reload`.
+
+Design rules:
+
+- **Pure crate.** `ocm-config` has no I/O. `parse()` takes text; include
+  resolution takes a loader closure, so the crate stays deterministic and
+  fuzzable and the coordinator owns the filesystem.
+- **Validate everything, report everything.** `validate()` collects every error
+  rather than failing on the first, which is what makes `ocm -t` useful.
+- **Errors are location-first and content-free.** `file:line:column` plus a
+  directive-level detail; never the contents of the file.
+- **Typed output.** Validation returns a `Config` of parsed ports, durations,
+  rates and enums, so the coordinator never re-parses strings at runtime.
+- **Inheritance is explicit.** A block that does not set a value gets the
+  documented default, not the parent's value, until v0.3 introduces inheritance.
+- **`include` is top-level and inert in P0.** It parses and validates; glob
+  expansion, cycle detection and depth limits are P1, so `ocm -t` never pretends
+  an unexpanded file was loaded.
+
+Config is read once at startup and again on `ocm reload`. Reload is
+generation-based: new jobs use the new config, in-flight jobs finish on the
+generation they started with, and receipts record the generation so a receipt
+can be explained after the file changed.

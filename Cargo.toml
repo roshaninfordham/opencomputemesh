@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/ocm-proto", "crates/ocm-sched"]
+members = ["crates/ocm-proto", "crates/ocm-sched", "crates/ocm-config"]
 exclude = ["crates/ocm-node", "fuzz"]
 
 [workspace.package]
@@ -13,6 +13,7 @@ repository = "https://github.com/roshaninfordham/opencomputemesh"
 [workspace.dependencies]
 ocm-proto = { path = "crates/ocm-proto" }
 ocm-sched = { path = "crates/ocm-sched" }
+ocm-config = { path = "crates/ocm-config" }
 serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast", "zeroize"] }
