@@ -8,3 +8,5 @@ web/dist/
 .pytest_cache/
 .playwright-mcp/
 .superpowers/
+
+/target
