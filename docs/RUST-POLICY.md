@@ -36,4 +36,3 @@ guards the UI — that satisfies the policy.
   justified in `docs/DEPENDENCIES.md`.
 - Staleness check fails CI if `ocm/*.py`, `tests/test_*.py`, `pyproject.toml`
   runtime deps, or Python `ocm-agent` references remain after the cutover.
-- See `docs/DRIFT-GUARD.md` for the check procedure.

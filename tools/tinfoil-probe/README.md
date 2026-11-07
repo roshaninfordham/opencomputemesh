@@ -2,7 +2,7 @@
 
 **Not part of the runtime.** A manual check that the Tinfoil router enclave is
 running the code published for a pinned repository, printed as JSON so the claim
-in `docs/superpowers/specs/2026-11-07-confidential-tier-tinfoil.md` can be
+in `tools/tinfoil-gateway/README.md` can be
 reproduced by anyone holding a key.
 
 ```bash

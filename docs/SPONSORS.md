@@ -175,7 +175,7 @@ uv sync --extra tiger                     # installs psycopg[binary]
 OCM_TIMESCALE_URL=postgresql://<user>:<password>@<host>:<port>/<db> uv run ocm serve
 ```
 
-The target database needs the `timescaledb` extension. Tiger Cloud services and the `timescale/timescaledb` Docker image provide it. The coordinator creates the tables, policies and aggregate itself. For a local setup see [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md#optional-sponsor-integrations).
+The target database needs the `timescaledb` extension. Tiger Cloud services and the `timescale/timescaledb` Docker image provide it. The coordinator creates the tables, policies and aggregate itself. The coordinator creates the tables, policies and aggregate itself.
 
 ### Verification
 

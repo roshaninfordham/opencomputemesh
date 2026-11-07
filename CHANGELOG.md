@@ -5,7 +5,10 @@ Semantic Versioning.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- Repository trimmed to what a reader needs: internal planning notes, stack tracking, the roadmap and
+  the demo runbook are gone, along with the video build directory and the 4.9 MB preview GIF. The
+  README (616 lines) and landing page now say the same things in a fraction of the space.
 
 ## [0.1.2] - 2026-11-07
 

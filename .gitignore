@@ -7,7 +7,6 @@ web/dist/
 .env
 .pytest_cache/
 .playwright-mcp/
-.superpowers/
 
 target/
 
