@@ -23,13 +23,15 @@ import psutil
 import websockets
 
 from .protocol import PROTOCOL_VERSION
-from .runtime import GeminiAdapter, InferenceRequest, OllamaAdapter, RuntimeAdapter
+from .runtime import GeminiAdapter, InferenceRequest, OllamaAdapter, OpenAICompatAdapter, RuntimeAdapter
 
 FATAL_CLOSE_CODES = {4003: "node revoked by owner", 4401: "credential or enrollment token rejected"}
 UNREACHABLE = {"ollama": "Ollama is not reachable on loopback. Start it with `ollama serve` and retry.",
-               "gemini": "Gemini API is not reachable or rejected the API key. Check GEMINI_API_KEY and network access."}
+               "gemini": "Gemini API is not reachable or rejected the API key. Check GEMINI_API_KEY and network access.",
+               "openai": "No OpenAI-compatible server answered that URL. Start one (SIE, vLLM, LM Studio, llama.cpp) and retry."}
 NO_MODELS = {"ollama": "Ollama has no models installed. Pull one yourself first, e.g. `ollama pull qwen2.5:1.5b`.",
-             "gemini": "The Gemini API listed no models supporting generateContent for this API key."}
+             "gemini": "The Gemini API listed no models supporting generateContent for this API key.",
+             "openai": "That server listed no models. Load one first, then share it by its exact id."}
 
 
 def say(msg: str) -> None:
@@ -330,17 +332,21 @@ class Agent:
 
 
 def main(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="ocm-agent", description="Share Ollama (local) or Gemini (cloud) models with an OpenComputeMesh network.")
+    p = argparse.ArgumentParser(prog="ocm-agent", description="Share local Ollama, an OpenAI-compatible server (SIE, vLLM, LM Studio), or Gemini models with an OpenComputeMesh network.")
     p.add_argument("--coordinator", default=os.environ.get("OCM_COORDINATOR"),
                    help="Coordinator origin, e.g. https://example.trycloudflare.com (env OCM_COORDINATOR)")
     p.add_argument("--models", help="Comma-separated installed model IDs to share (otherwise asked interactively)")
     p.add_argument("--name", help="Display name shown to the network")
     p.add_argument("--state-dir", default=os.environ.get("OCM_AGENT_STATE_DIR", str(Path.home() / ".opencomputemesh")),
                    help="Where the node credential is stored (use a separate dir per simulated node)")
-    p.add_argument("--runtime", choices=("ollama", "gemini"), default=os.environ.get("OCM_RUNTIME", "ollama"),
-                   help="ollama: loopback runtime on this machine; gemini: Google's cloud API (env OCM_RUNTIME)")
+    p.add_argument("--runtime", choices=("ollama", "gemini", "openai"), default=os.environ.get("OCM_RUNTIME", "ollama"),
+                   help="ollama: loopback Ollama; openai: any OpenAI-compatible server (SIE, vLLM, LM Studio); "
+                        "gemini: Google's cloud API (env OCM_RUNTIME)")
     p.add_argument("--ollama", default=os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-                   help="Runtime URL. Loopback by default; a non-loopback URL needs --allow-remote-runtime")
+                   help="Ollama URL for --runtime ollama. Loopback by default; a non-loopback URL needs --allow-remote-runtime")
+    p.add_argument("--base-url", default=os.environ.get("OCM_OPENAI_BASE_URL", "http://127.0.0.1:8080"),
+                   help="OpenAI-compatible server for --runtime openai (env OCM_OPENAI_BASE_URL). "
+                        "Loopback unless --allow-remote-runtime")
     p.add_argument("--allow-remote-runtime", action="store_true",
                    default=os.environ.get("OCM_ALLOW_REMOTE_RUNTIME", "") in ("1", "true", "yes"),
                    help="Share an Ollama/vLLM the owner hosts elsewhere (env OCM_ALLOW_REMOTE_RUNTIME=1). "
@@ -358,8 +364,15 @@ def main(argv: list[str] | None = None) -> None:
     elif a.runtime == "ollama":
         scope = runtime_scope(a.ollama, a.allow_remote_runtime)
         runtime = OllamaAdapter(a.ollama)
+    elif a.runtime == "openai":
+        # One adapter for every server that speaks the chat-completions protocol (SIE, vLLM, LM Studio,
+        # llama.cpp, TGI). Same loopback rule: the server must be on this machine unless the owner opts out.
+        scope = runtime_scope(a.base_url, a.allow_remote_runtime)
+        key = os.environ.pop("OCM_OPENAI_API_KEY", "").strip() or None  # header only, never logged
+        runtime = OpenAICompatAdapter(a.base_url, api_key=key)
+        say(f"openai-compatible runtime at {a.base_url}; models it lists may be shared by exact id")
     else:
-        raise SystemExit(f"Unknown runtime {a.runtime!r} (OCM_RUNTIME): use ollama or gemini.")
+        raise SystemExit(f"Unknown runtime {a.runtime!r} (OCM_RUNTIME): use ollama, openai or gemini.")
     state_dir = Path(a.state_dir).expanduser()
     saved = json.loads((state_dir / "node.json").read_text()) if (state_dir / "node.json").exists() else {}
     coordinator = a.coordinator or saved.get("coordinator")

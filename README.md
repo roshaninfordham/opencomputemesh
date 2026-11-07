@@ -23,7 +23,7 @@ Built for AI Engineer NYC 2026 (MLH). Sponsor tracks entered: Best Overall, Best
 
 | Piece | State |
 |---|---|
-| Coordinator, Python agent, web UI | Working. 83 tests pass; 3 skip without the `tiger`/`sentry` extras or a live Ollama. |
+| Coordinator, Python agent, web UI | Working. 97 tests pass; 3 skip without the `tiger`/`sentry` extras or a live Ollama. |
 | `ocm-node` (Rust) | Working, including `--allow-remote-runtime`; binaries for macOS (ARM + Intel), Windows x64 and Linux are built by `.github/workflows/release.yml`. |
 | Tinfoil confidential tier | Gateway verified against a live enclave with the fingerprint pinned; container definition and publish path are in `tools/tinfoil-gateway`. Deploying it needs our own Tinfoil organization, so there is no public URL yet. |
 | Cognee memory | Built and queried locally with **no API key** (graph of 15 nodes from one sentence, recall in 0.1-0.2s). The client seam is tested; agent memory runs are not shipped. |
@@ -126,7 +126,7 @@ ocm check-ledger                          # ledger invariants; exit 0 means cons
 | Move non-cash OpenCompute Credits per job, with an append-only ledger, holds capped at what the requester agreed, and `ocm check-ledger` to verify it. | Handle real money, redemption, federation or horizontal scaling of the coordinator. |
 | Run two interchangeable agents: Python (`ocm-agent`) and Rust (`ocm-node`, single binary, Ollama only). | Attest a contributor's laptop: only the Tinfoil enclave tier can be attested, and contributor nodes are labelled `attested: false`. |
 | Serve an OpenAI-compatible `/v1/chat/completions` subset plus a browser app from the same origin. | Stream through the OpenAI endpoint (`stream: true` returns `400`), or expose the full OpenAI surface. |
-| Add runtimes behind one adapter: local Ollama, an opted-in remote runtime, and the Gemini API. | Support llama.cpp, vLLM or MLX today; those are extension points. |
+| Add runtimes behind one adapter: local Ollama, an opted-in remote runtime, the Gemini API, and any OpenAI-compatible server (SIE, vLLM, LM Studio, llama.cpp, TGI). | Run models on MLX today; it is an extension point. |
 | Turn finished jobs into a labelled decision dataset with `ocm export-decisions`, containing no prompt or output text. | Claim model accuracy no one has measured: the dataset ships, the training run has not happened. |
 | Report node hardware (CPU, memory, GPUs with compute capability and driver) so routing can fail before dispatch rather than during it. | Use that inventory to verify what a node actually ran. |
 | Optionally copy terminal-job metrics to TimescaleDB and errors to Sentry, both scrubbed of prompts, cookies and tokens. | Store prompts or outputs anywhere durable, including logs. |
@@ -188,7 +188,7 @@ Each layer is a slot with one interface. The box borders show what is built and 
 
 | Layer | Default | Also built | Status |
 |---|---|---|---|
-| Model runtime | Ollama on `127.0.0.1` (`ocm/runtime.py` `OllamaAdapter`) | Gemini API (`GeminiAdapter`, `ocm-agent --runtime gemini`) | Ollama verified end to end. Gemini is unit-tested against the documented API format; a live run needs `GEMINI_API_KEY`. |
+| Model runtime | Ollama on `127.0.0.1` (`ocm/runtime.py` `OllamaAdapter`) | Gemini API (`GeminiAdapter`, `ocm-agent --runtime gemini`); any OpenAI-compatible server (`OpenAICompatAdapter`, `ocm-agent --runtime openai`: SIE, vLLM, LM Studio, llama.cpp) | Ollama verified end to end. Gemini and the OpenAI-compatible adapter are tested against their documented wire formats with a mocked transport; a live run needs a key or a running server. |
 | Node agent | Python `ocm-agent` | Rust `ocm-node` (single binary, Ollama only) | Both verified against the coordinator, including over a public `wss://` tunnel. |
 | Jobs and ledger | SQLite in WAL mode | n/a (Postgres is an extension point) | Verified. |
 | Time-series metrics | Off | Tiger Data / TimescaleDB sink (`ocm/timeseries.py`, `OCM_TIMESCALE_URL`): hypertable `ocm_job_metrics`, continuous aggregate `ocm_job_metrics_1m`, compression policy, live throughput chart | Verified against TimescaleDB 2.30.2 locally; not yet against a hosted Tiger Cloud service. |
@@ -242,7 +242,18 @@ uv run ocm-agent --coordinator http://127.0.0.1:8000 --models qwen2.5:1.5b --nam
 
 The agent asks for the token with a hidden prompt. For non-interactive runs set `OCM_ENROLLMENT_TOKEN` in the environment instead. After enrollment the agent saves a node credential to `~/.opencomputemesh/node.json` (mode 0600). Later runs reuse it and need no token. Use `--state-dir DIR` to keep a separate credential per node, for example when simulating two nodes on one machine.
 
-Other agent flags: `--runtime` (`ollama` or `gemini`, default from `OCM_RUNTIME`, else `ollama`), `--ollama` (default `http://127.0.0.1:11434`; loopback unless `--allow-remote-runtime`), `--allow-remote-runtime` (share a runtime this machine does not host; the node is labelled unattested), `--max-jobs` (default 1), `--heartbeat` (seconds, default 20). `--coordinator` can also come from `OCM_COORDINATOR` or from the saved state.
+Other agent flags: `--runtime` (`ollama`, `openai` or `gemini`, default from `OCM_RUNTIME`, else `ollama`), `--ollama` (default `http://127.0.0.1:11434`; loopback unless `--allow-remote-runtime`), `--base-url` (the OpenAI-compatible server for `--runtime openai`, default `http://127.0.0.1:8080`, from `OCM_OPENAI_BASE_URL`; an optional key comes from `OCM_OPENAI_API_KEY` and travels only in the `Authorization` header), `--allow-remote-runtime` (share a runtime this machine does not host; the node is labelled unattested), `--max-jobs` (default 1), `--heartbeat` (seconds, default 20). `--coordinator` can also come from `OCM_COORDINATOR` or from the saved state.
+
+To share a model that a self-hosted inference server already serves, use the OpenAI-compatible runtime. This works with SIE, vLLM, LM Studio and `llama-server` alike, because they answer the same call:
+
+```bash
+docker run --gpus all -p 8080:8080 -v sie-hf-cache:/app/.cache/huggingface \
+  ghcr.io/superlinked/sie-server:latest-cuda12-default        # or vLLM, LM Studio, llama.cpp
+uv run ocm-agent --runtime openai --base-url http://127.0.0.1:8080 \
+  --models qwen3.6-27b --coordinator http://127.0.0.1:8000 --name gpu-box
+```
+
+Those servers expose an id, not a content digest, so such a node cannot take part in digest-matched benchmarks. Token counts still come from the server's own `usage` block, and durations stay empty because the protocol reports none.
 
 Optional sponsor integrations (each is independent; see [Sponsor technologies](#sponsor-technologies)):
 
@@ -534,7 +545,8 @@ uv run pytest -q                                              # Python: coordina
 cargo test --manifest-path crates/ocm-node/Cargo.toml         # Rust agent
 ```
 
-Current counts (v0.1.1, clean checkout with no extras, no Ollama and no TimescaleDB): **83 passed, 3 skipped** in Python, **51 passed** in the Rust workspace and **10 passed** in `ocm-node`. The table counts tests per file, 89 in total; a file that skips at import is collected as a single item, so a clean run collects 86. The three skips say exactly what is missing: `psycopg` plus a database (which holds back the four TimescaleDB tests), `sentry_sdk`, and Ollama on `127.0.0.1:11434`.
+
+Current counts (v0.1.1, clean checkout with no extras, no Ollama and no TimescaleDB): **97 passed, 3 skipped** in Python, **51 passed** in the Rust workspace and **10 passed** in `ocm-node`. The table counts tests per file, 103 in total; a file that skips at import is collected as a single item, so a clean run collects 100. The three skips say exactly what is missing: `psycopg` plus a database (which holds back the four TimescaleDB tests), `sentry_sdk`, and Ollama on `127.0.0.1:11434`.
 
 | File | Tests | Covers |
 |---|---|---|
@@ -542,6 +554,9 @@ Current counts (v0.1.1, clean checkout with no extras, no Ollama and no Timescal
 | `tests/test_integration.py` | 15 | A real coordinator with fake WebSocket nodes: routing, streaming and settlement, idempotent replay, worker errors, retry on another worker after a disconnect, timeout and cancel, insufficient credits, pause and authorization, rejection of reports on foreign jobs |
 | `tests/test_agent.py` | 23 | Python node agent: loopback-only Ollama URL parsing (including userinfo tricks), enrollment-token reuse after a failed attempt, proxy settings ignored for runtime traffic |
 | `tests/test_export.py` | 4 | Decision export: terminal jobs only, node runtime tier
+| `tests/test_openai_compat.py` | 14 | OpenAI-compatible runtime (SIE, vLLM, LM Studio):
+  streamed tokens, usage mapping without invented durations, one retry on a `stream_options` 400, cancel,
+  model listing, and a key that travels only in the header |
   joined, no text fields anywhere, and `since`/`limit` bounds |
 | `tests/test_gemini.py` | 12 | Gemini adapter with a mocked transport: message conversion, SSE split mid-line, tokens, usage and thinking tokens, finish-reason mapping, API errors without the prompt, missing finish reason, cancellation, model listing, key only in the header, `--runtime gemini` requiring a key and announcing the cloud runtime |
 | `tests/test_memory.py` | 11 | Cognee memory seam: dataset-scoped client, a dataset name cannot escape its scope, empty input is refused, and failures plus `repr` never carry memory content |
@@ -570,7 +585,7 @@ Known runtime quirk: with Ollama 0.17.7, `qwen3:4b` ignores `think: false` and e
 
 - **Single trust boundary.** There is one coordinator process and one SQLite file. Whoever runs the coordinator controls membership, routing and the ledger. There is no replication, no federation and no horizontal scaling. Rate limits and WebSocket tickets are in-process.
 - **A URL alone shares no compute.** Joining in a browser only lets you send requests. Capacity exists only while someone runs the node agent with Ollama and approved models.
-- **Two runtimes.** Ollama (loopback) and the Gemini API are implemented behind `RuntimeAdapter`. The Gemini adapter has not been run against the live API. A Gemini node sends prompts to Google, and the Rust agent supports Ollama only. llama.cpp, vLLM and MLX are not implemented.
+- **Three runtime families.** Ollama (loopback), the Gemini API, and any OpenAI-compatible server (`--runtime openai`: SIE, vLLM, LM Studio, llama.cpp's server, TGI) sit behind `RuntimeAdapter`. Gemini is unit-tested against the documented API format, and the OpenAI-compatible adapter is covered by mock-transport tests; neither was run against a live service here. A Gemini node sends prompts to Google, and the Rust agent supports Ollama only. MLX is not implemented.
 - **One worker per request.** Each request runs entirely on one node. There is no model sharding, tensor or pipeline parallelism, or splitting a request across machines.
 - **No per-job GPU or CPU telemetry.** The system records worker wall time and runtime-reported durations and tokens, not per-job CPU or GPU active time. Usage reports show these as `null`.
 - **Token counts depend on the runtime.** They are whatever Ollama or Gemini reports, with their provenance recorded. Different runtimes or model templates count differently. Jobs without both counts are not charged.
@@ -596,7 +611,7 @@ Known runtime quirk: with Ollama 0.17.7, `qwen3:4b` ignores `think: false` and e
 |---|---|
 | Technology | One-process FastAPI coordinator with a job state machine and append-only micro-OCC ledger ([ocm/hub.py](ocm/hub.py), [ocm/ledger.py](ocm/ledger.py)); two node agents, Python and Rust ([ocm/agent.py](ocm/agent.py), [crates/ocm-node](crates/ocm-node)); pluggable runtimes, Ollama and Gemini ([ocm/runtime.py](ocm/runtime.py)); TimescaleDB hypertable, continuous aggregate and compression ([ocm/timeseries.py](ocm/timeseries.py)); scrubbed Sentry ([ocm/observability.py](ocm/observability.py)). |
 | Design | Every sponsor integration is optional and isolated behind an existing seam (runtime adapter, a non-blocking metrics sink, CLI start-up hook). Metrics carry provenance and stay `null` when not reported ([How metrics are defined](#how-metrics-are-defined)). Outbound-only agents, loopback-only Ollama, no prompt storage ([Security model](#security-model)). Architecture in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). |
-| Completion | 83 Python tests pass (3 skip without extras or Ollama) and 61 Rust tests pass ([Testing](#testing)); CI on every push ([ci.yml](.github/workflows/ci.yml)); a web app served from the coordinator, an OpenAI-compatible endpoint, a demo runbook with preflight script ([docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md)); Tiger Data verified against a real TimescaleDB 2.30.2. Not verified live: Gemini (no key) and Sentry (no DSN). |
+| Completion | 97 Python tests pass (3 skip without extras or Ollama) and 61 Rust tests pass ([Testing](#testing)); CI on every push ([ci.yml](.github/workflows/ci.yml)); a web app served from the coordinator, an OpenAI-compatible endpoint, a demo runbook with preflight script ([docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md)); Tiger Data verified against a real TimescaleDB 2.30.2. Not verified live: Gemini (no key) and Sentry (no DSN). |
 | Learning | [What we learned](#what-we-learned), with the commits that record each fix (for example `e87e207` for the rustls provider, `2c76517` for disclosing capped settlements, `b50d4dd` for carrying `done_reason` through to `finish_reason`). |
 
 ## License

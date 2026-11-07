@@ -5,7 +5,7 @@ OpenComputeMesh v0.1 has these parts:
 - a single coordinator process (`ocm/app.py` for HTTP and WebSocket, `ocm/hub.py` for live state and the job lifecycle)
 - a SQLite database in WAL mode (`ocm/db.py`)
 - outbound-only node agents: Python `ocm-agent` (`ocm/agent.py`) and Rust `ocm-node` (`crates/ocm-node`)
-- a runtime adapter layer (`ocm/runtime.py`) between the Python agent and its model runtime: `OllamaAdapter` (loopback, the default) and `GeminiAdapter` (`--runtime gemini`). The Rust agent talks to Ollama directly.
+- a runtime adapter layer (`ocm/runtime.py`) between the Python agent and its model runtime: `OllamaAdapter` (loopback, the default), `GeminiAdapter` (`--runtime gemini`) and `OpenAICompatAdapter` (`--runtime openai`: SIE, vLLM, LM Studio, llama.cpp's server, TGI). The Rust agent talks to Ollama directly.
 - a decision exporter (`ocm/decisions.py`, `ocm export-decisions`) that turns terminal jobs into labelled JSONL rows for the house router model, with no prompt or output text in any row
 - optional: a Tiger Data / TimescaleDB metrics sink (`ocm/timeseries.py`, `OCM_TIMESCALE_URL`)
 - optional: Sentry error monitoring with scrubbers (`ocm/observability.py`, `SENTRY_DSN`)
@@ -46,6 +46,8 @@ flowchart LR
 
 The coordinator normalizes `final_stats` with `normalize_ollama` (`ocm/metrics.py`) whatever the runtime, stores `done_reason` on the job (`/v1/chat/completions` maps `length` to `finish_reason: "length"`, anything else to `"stop"`), and ignores keys it does not know, including `thoughts_count`.
 
+`OpenAICompatAdapter` covers every server that speaks the chat-completions protocol, which is why the mesh needs no client per engine: SIE, vLLM, LM Studio, llama.cpp's server and TGI all answer `POST /v1/chat/completions` with a `data:` event stream. Two details matter. The final usage chunk is requested with `stream_options: {"include_usage": true}`, and a `400` that names that field is retried once without it rather than failing the job, because not every compatible server accepts it. And these servers expose an `id`, not a content digest, so their models carry `digest: null` and cannot take part in digest-matched benchmarks; token counts still come from the server's own `usage` block, while durations stay `null` because the protocol reports none.
+
 ## Metrics sink and observability
 
 - **TimescaleDB sink** (`ocm/timeseries.py`). `Hub` creates a `Sink(settings.timescale_url)`; it is a no-op unless the URL is set and `psycopg` is installed. The app lifespan starts and closes it. After every terminal transition (`_settle_outcome` for completed jobs, `_finish` for failed, cancelled and expired ones) the hub calls `Sink.record(job)`, which appends a row of metric columns to a bounded deque and returns. A background task connects, ensures the schema under an advisory lock, and inserts in batches. Details and guarantees are in [SPONSORS.md](SPONSORS.md#tiger-data-timescaledb).
@@ -54,7 +56,7 @@ The coordinator normalizes `final_stats` with `normalize_ollama` (`ocm/metrics.p
 
 ## Rust agent
 
-`crates/ocm-node` is wire-compatible with `ocm/agent.py`: same messages, same flags for the Ollama runtime, same `<state-dir>/node.json`. It supports Ollama only (`runtime_name: "ollama"`), and it shares `--allow-remote-runtime` with the Python agent: a runtime the owner hosts elsewhere is probed once per shared model, then every receipt from that node carries `runtime_scope: "remote"` and `attested: false`. rustls 0.23 needs a process-level crypto provider before the first TLS handshake; `install_tls_provider()` installs `ring` at startup (pinned in `Cargo.toml`, no C toolchain needed). Without it the agent panicked on its first `wss://` connection.
+`crates/ocm-node` is wire-compatible with `ocm/agent.py`: same messages, same flags for the Ollama runtime, same `<state-dir>/node.json`. It supports Ollama only (`runtime_name: "ollama"`), and it shares `--allow-remote-runtime` with the Python agent: a runtime the owner hosts elsewhere is probed once per shared model, then every receipt from that node carries `runtime_scope: "remote"` and `attested: false`. It has no `--runtime`, so the Gemini and OpenAI-compatible adapters are Python-agent features. rustls 0.23 needs a process-level crypto provider before the first TLS handshake; `install_tls_provider()` installs `ring` at startup (pinned in `Cargo.toml`, no C toolchain needed). Without it the agent panicked on its first `wss://` connection.
 
 ## Job state machine
 

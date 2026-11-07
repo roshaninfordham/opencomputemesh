@@ -26,7 +26,7 @@ Stories delivered:
 - As Priya, I call `/v1/chat/completions` with API key, get usage + receipt.
 
 Outcomes: real routed/streamed/settled prompt with runtime_reported tokens;
-83 Python + 61 Rust tests; Tiger Data verified on TimescaleDB 2.30.2;
+97 Python + 61 Rust tests; Tiger Data verified on TimescaleDB 2.30.2;
 Gemini/Sentry built, not live-verified. Demo via Quick Tunnel in Chromium.
 
 Limits: single coordinator process + SQLite; in-memory sockets/limits;
@@ -63,6 +63,10 @@ Enablers: RuntimeAdapter {health, list_models, generate_stream}; ollama
 in x-goog-api-key). Provenance preserved; missing durations stay null.
 
 Outcome: same receipt shapes for all runtimes; Gemini live smoke test.
+
+Status: `openai_compat` shipped as `--runtime openai` — one adapter for SIE, vLLM, LM Studio, llama.cpp
+and TGI, with the same loopback rule and a retry for servers that reject `stream_options`. Verified with
+mock-transport tests, not yet against a live SIE cluster. The Gemini live smoke still needs a key.
 
 ### 1.3 Rust coordinator + ledger
 - As Sam, I run one `ocm-coord` binary/container, restarts do not corrupt ledger.

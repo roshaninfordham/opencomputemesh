@@ -6,6 +6,11 @@ Semantic Versioning.
 ## [Unreleased]
 
 ### Added
+- `ocm-agent --runtime openai`: one adapter for every server that speaks the OpenAI chat-completions
+  protocol (SIE, vLLM, LM Studio, llama.cpp, TGI), sharing its models through the mesh unchanged. The
+  loopback rule is identical to Ollama, `--allow-remote-runtime` covers a server on another machine, and a
+  server that rejects `stream_options` is retried once without it. Token counts come from the server's
+  `usage` block; durations stay empty because the protocol reports none.
 - README install instructions for every role and OS (coordinator wheel plus web bundle, one
   `ocm-node` binary per platform, browser-only joining), a capabilities table that states what
   the software does not do, and a redrawn architecture diagram covering the attested tier,

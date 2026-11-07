@@ -308,3 +308,125 @@ class GeminiAdapter:
             return RuntimeResult(ok=False, error="runtime stream ended without a finish reason")
         return RuntimeResult(ok=True, final_stats=gemini_final_stats(usage, finish), worker_elapsed_ms=elapsed(),
                              worker_ttft_ms=ttft)
+
+
+OPENAI_FINISH = {"stop": "stop", "length": "length", "tool_calls": "tool_calls",
+                 "content_filter": "content_filter", "function_call": "tool_calls"}
+
+
+def openai_body(req: InferenceRequest, stream_options: bool = True) -> dict:
+    """Our request -> OpenAI chat-completions body. `max_tokens` is the name every compatible server
+    understands; `max_completion_tokens` is not, so it is not sent."""
+    body = {"model": req.model_id, "messages": req.messages, "stream": True, "max_tokens": req.max_tokens}
+    if req.temperature is not None:
+        body["temperature"] = req.temperature
+    if req.top_p is not None:
+        body["top_p"] = req.top_p
+    if stream_options:
+        # Ask for the final usage chunk. Not every compatible server accepts this field, so a 400 that names
+        # it is retried without it rather than failing a job the server could have served.
+        body["stream_options"] = {"include_usage": True}
+    return body
+
+
+def openai_final_stats(usage: dict, finish: str | None) -> dict:
+    """Only what the server reported. These servers report no durations, so none are invented and rates
+    stay unavailable instead of flattering the receipt."""
+    stats = {}
+    if "prompt_tokens" in usage:
+        stats["prompt_eval_count"] = usage["prompt_tokens"]
+    if "completion_tokens" in usage:
+        stats["eval_count"] = usage["completion_tokens"]
+    if finish:
+        stats["done_reason"] = OPENAI_FINISH.get(finish, finish)
+    return stats
+
+
+class OpenAICompatAdapter:
+    """Any server that speaks OpenAI's chat-completions protocol: SIE, vLLM, LM Studio, llama.cpp's server,
+    TGI. They differ in engines and model loading, not in the call, so one adapter reaches all of them and the
+    mesh does not need a client per engine.
+
+    A model with no digest is advertised as such: OpenAI-compatible servers expose an id, not a content hash,
+    so these nodes cannot serve digest-matched benchmarks. Nothing else changes."""
+
+    name = "openai"
+    VERSION = "openai-compatible"
+
+    def __init__(self, base_url: str = "http://127.0.0.1:8080", api_key: str | None = None, timeout: float = 180,
+                 transport: httpx.AsyncBaseTransport | None = None):
+        # trust_env=False for the same reason as Ollama: prompts must not travel through an ambient proxy.
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        self.client = httpx.AsyncClient(base_url=base_url, headers=headers, trust_env=False,
+                                        timeout=httpx.Timeout(timeout, connect=5), transport=transport)
+
+    async def health(self) -> str | None:
+        try:
+            r = await self.client.get("/v1/models")
+            r.raise_for_status()
+            return self.VERSION
+        except (httpx.HTTPError, ValueError):
+            return None
+
+    async def list_models(self) -> list[RuntimeModel]:
+        r = await self.client.get("/v1/models")
+        r.raise_for_status()
+        return [RuntimeModel(model_id=m["id"], digest=None, runtime=self.name, family=m.get("owned_by"))
+                for m in r.json().get("data", []) if m.get("id")]
+
+    async def generate_stream(self, req, on_token, cancel) -> RuntimeResult:
+        result, unsupported = await self._attempt(openai_body(req), on_token, cancel)
+        if unsupported:
+            result, _ = await self._attempt(openai_body(req, stream_options=False), on_token, cancel)
+        return result
+
+    async def _attempt(self, body: dict, on_token, cancel) -> tuple[RuntimeResult, bool]:
+        start = time.monotonic()
+        ttft = None
+        usage: dict = {}
+        finish = None
+        decoder = SSEDecoder()
+
+        def elapsed():
+            return round((time.monotonic() - start) * 1000)
+
+        async def handle(event) -> RuntimeResult | None:
+            nonlocal ttft, usage, finish
+            if "error" in event and event["error"]:
+                err = event["error"]
+                msg = err.get("message") if isinstance(err, dict) else str(err)
+                return RuntimeResult(ok=False, error=f"runtime error: {str(msg)[:200]}")
+            usage = event.get("usage") or usage
+            for choice in event.get("choices") or []:
+                text = (choice.get("delta") or {}).get("content")
+                if text:
+                    if ttft is None:
+                        ttft = elapsed()
+                    await on_token(text)
+                if choice.get("finish_reason"):
+                    finish = choice["finish_reason"]
+            return None
+
+        try:
+            async with self.client.stream("POST", "/v1/chat/completions", json=body) as resp:
+                if resp.status_code != 200:
+                    text = (await resp.aread()).decode(errors="replace")
+                    # Only this specific rejection is worth a retry; every other 400 is a real error.
+                    unsupported = resp.status_code == 400 and "stream_options" in text
+                    return RuntimeResult(ok=False, error=_api_error(text, resp.status_code)), unsupported
+                async for text in resp.aiter_text():
+                    if cancel.is_set():  # leaving the context closes the stream
+                        return RuntimeResult(ok=False, cancelled=True, error="cancelled",
+                                             worker_elapsed_ms=elapsed()), False
+                    for event in decoder.feed(text):
+                        if err := await handle(event):
+                            return err, False
+                for event in decoder.flush():
+                    if err := await handle(event):
+                        return err, False
+        except httpx.HTTPError as e:
+            return RuntimeResult(ok=False, error=f"runtime connection error: {type(e).__name__}"), False
+        if finish is None:
+            return RuntimeResult(ok=False, error="runtime stream ended without a finish reason"), False
+        return RuntimeResult(ok=True, final_stats=openai_final_stats(usage, finish),
+                             worker_elapsed_ms=elapsed(), worker_ttft_ms=ttft), False
