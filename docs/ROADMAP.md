@@ -8,7 +8,7 @@ Others join from any major OS/device with one install, share what they choose,
 run prompts from web or API, and trust receipts, costs and contributions —
 among friends first, among strangers eventually.
 
-Principles: explicit sharing only; no fake numbers; outbound-only nodes;
+Principles: explicit sharing only; Rust-only runtime (see docs/RUST-POLICY.md); no fake numbers; outbound-only nodes;
 prompts are toxic (never stored/logged); one request = one node (no sharding);
 credits are accounting, not money (until explicitly changed).
 
@@ -149,6 +149,12 @@ Outcomes: fresh VPS to public mesh <10min from docs; 30-day soak with
 2. Mobile battery/thermals may limit phones to tiny models — prototype first.
 3. Prompts cross borders; Gemini discloses to Google; OCC non-cash till counsel.
 4. Free grants invite farms — need invite-graph or cost-to-join before open enrol.
+
+## Rust-only rule
+
+Backend/systems are Rust only. Python coordinator/agent are v0.1 legacy,
+deleted at v0.2 cutover. Web stays React+TS but embedded in the Rust binary.
+Details: `docs/RUST-POLICY.md`. Drift checks: `docs/DRIFT-GUARD.md`.
 
 ## Tracking in this branch
 
