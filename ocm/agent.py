@@ -59,12 +59,17 @@ def cpu_model() -> str | None:
 
 def gpu_inventory() -> list[dict]:
     """Best-effort and labelled by source. Empty list means unknown, not 'no GPU'."""
-    out = _run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
+    out = _run(["nvidia-smi", "--query-gpu=name,memory.total,compute_cap,driver_version",
+                "--format=csv,noheader,nounits"])
     if out:
         gpus = []
         for line in out.splitlines():
-            name, _, mem = line.partition(",")
-            gpus.append({"name": name.strip()[:128], "memory_total_bytes": int(float(mem)) * 1024 * 1024 if mem.strip() else None,
+            # Older drivers may omit trailing columns; pad so a short row degrades, not crashes.
+            parts = [p.strip() for p in line.split(",")] + [""] * 4
+            name, mem, cap, driver = parts[:4]
+            gpus.append({"name": name[:128],
+                         "memory_total_bytes": int(float(mem)) * 1024 * 1024 if mem else None,
+                         "cuda_compute_cap": cap or None, "driver_version": driver or None,
                          "source": "nvidia-smi"})
         return gpus
     if sys.platform == "darwin":

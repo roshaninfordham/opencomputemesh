@@ -244,6 +244,40 @@ from an accounting record into execution evidence.
 - Attestation failure stops the request; no plaintext fallback exists to abuse.
 - Contributor hardware is honestly labelled unattested, everywhere.
 
+## Phase 1.8 — House router model (Laya-style) [PLANNED]
+
+Goal: a millisecond decision model that routes like us, trained on our own decisions.
+Laya (`topoteretes/laya`, Apache-2.0) proves the shape: a non-autoregressive decision
+head, near chance zero-shot, 0.362 → 0.766 on its typed-decisions benchmark after
+fine-tuning on domain labels, served in ~33 ms on CPU.
+
+Why it fits: the coordinator already makes hundreds of identical-form decisions a day —
+which pool, which node, is this error transient, is this injection. Those are `choice` /
+`score` / `yes-no` decisions, exactly Laya-shaped, and the receipts are the labelled
+dataset. A small head on the coordinator beats calling a 120B model for every routing
+question on cost, latency and privacy — the decision never leaves the box.
+
+Honest rules (borrowed from Laya's own limits page):
+
+- Report zero-shot vs fine-tuned on the same held-out set, per task, or do not report.
+- The number is accuracy on *our* decisions, never "95% more accurate" without a baseline.
+- Train outside Tinfoil: Kaggle 2xT4 (their notebook runs ~4-5h for ~30k questions) or
+  a Mac with MPS. Tinfoil does not train; it proves. Serving our weights under attestation
+  uses the documented `tinfoil model wrap` + vLLM mount path, which needs a standard HF
+  architecture — a custom head stays on the coordinator until it is one.
+
+| P | Work | Why first |
+|---|---|---|
+| R0 | Accelerator labels: CUDA compute-cap + VRAM on every node, MLX runtime for Macs | Route big models to the hardware that can run them; use what contributors have |
+| R1 | Labelled decision log: every routing decision with its outcome, exportable | The dataset is the product; everything else is plumbing |
+| R2 | Fine-tune a decision head on R1; publish the held-out delta | The only accuracy claim that counts |
+| R3 | Serve the head on the coordinator; decisions stay local | Milliseconds, no GPU, no enclave cost per decision |
+
+MLX is Apple-silicon only and cannot run inside an enclave — there is no Apple hardware
+in a datacenter. It is our edge story: Mac inference, Mac-based private LoRA, Swift
+apps. CUDA is the training path and the heavy-inference path. Neither replaces the
+other; the labels in the receipt say which one served.
+
 ## Phase 2 — v0.4 Beyond one room [PLANNED]
 
 - As Sam with 200 users, I run Postgres primary, not SQLite.

@@ -30,6 +30,8 @@ built web bundle. See `docs/RELEASING.md`.
   can join without installing anything on the machine with the GPU. The node probes each shared  model before enrolling, and its receipts carry `runtime_scope` and `attested: false`.
 - `ocm-node` matches it: `--allow-remote-runtime`, a startup probe per shared model, and `remote`
   plus `attested: false` on receipts.
+- `ocm-agent`: reports NVIDIA compute capability and driver version alongside VRAM in the node
+  inventory, so routing can prefer the hardware a model needs before dispatch, not during.
 
 ### Changed
 - `tools/tinfoil-gateway`: a non-loopback bind now requires `GATEWAY_TOKEN` and the process exits

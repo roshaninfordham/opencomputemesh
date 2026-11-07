@@ -2,6 +2,8 @@
 
 import asyncio
 
+import ocm.agent
+
 import pytest
 
 from ocm.agent import Agent, build_hello, is_loopback_url, prompt_token, runtime_scope
@@ -105,3 +107,21 @@ def test_an_older_agent_that_sends_no_scope_is_treated_as_local():
     from ocm.protocol import Capabilities
 
     assert Capabilities(display_name="node").runtime_scope == "local"
+
+
+def test_gpu_inventory_reports_cuda_details(monkeypatch):
+    rows = "NVIDIA GeForce RTX 4090, 24564, 8.9, 550.54.15\n"
+    monkeypatch.setattr(ocm.agent, "_run", lambda cmd: rows if cmd[0] == "nvidia-smi" else None)
+    (gpu,) = ocm.agent.gpu_inventory()
+    assert gpu["name"] == "NVIDIA GeForce RTX 4090"
+    assert gpu["memory_total_bytes"] == 24564 * 1024 * 1024
+    assert gpu["cuda_compute_cap"] == "8.9"
+    assert gpu["driver_version"] == "550.54.15"
+    assert gpu["source"] == "nvidia-smi"
+
+
+def test_gpu_inventory_survives_short_rows(monkeypatch):
+    monkeypatch.setattr(ocm.agent, "_run", lambda cmd: "Some Card, 8192\n" if cmd[0] == "nvidia-smi" else None)
+    (gpu,) = ocm.agent.gpu_inventory()
+    assert gpu["memory_total_bytes"] == 8192 * 1024 * 1024
+    assert gpu["cuda_compute_cap"] is None and gpu["driver_version"] is None
