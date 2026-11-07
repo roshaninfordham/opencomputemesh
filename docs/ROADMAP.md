@@ -118,6 +118,8 @@ rate limits. Spec: `docs/superpowers/specs/2026-11-07-edge-config-and-sharing.md
   and starts serving it locally, free and open source.
 - As Sam, I edit `ocm.conf` and run `ocm reload`; new jobs use the new policy
   while in-flight streams finish on the old one.
+- As Dev, I already run Ollama on a desktop. I paste its URL into the join page
+  and share that GPU without installing anything of ours.
 
 ### Priorities (build in this order)
 
@@ -136,11 +138,50 @@ semantics as `test_config()`). P1-P6 are specified in
 `docs/superpowers/plans/2026-11-07-v0.2-plan-2-config.md`; live status and gate
 evidence live in `STACK-TRACKING.md`.
 
+### The no-install ladder
+
+"One URL onboards a contributor" has four honest rungs. They differ in what the
+contributor installs and — more importantly — in what the receipt is allowed to
+claim.
+
+| Rung | Contributor does | Installs | Capacity | Attested |
+|---|---|---|---|---|
+| T0 | pastes the URL of a runtime they already run (Ollama, vLLM, LM Studio) | nothing of ours | all of it: their GPU, their models | no |
+| T1 | opens a share URL and keeps the tab open | nothing | small models, best-effort, tab-scoped | no |
+| T2 | runs one node container | a container, no toolchain | full | no |
+| T3 | runs the native node | yes | full, with model management and pause | no |
+
+T0 is the rung that matters most and costs least. The agent already reaches its
+runtime over HTTP through `RuntimeAdapter {health, list_models, generate_stream}`,
+so "the runtime lives on another machine" is a policy change, not a new
+subsystem — and today we refuse it: `--ollama` is loopback-only by design
+(`SECURITY.md`). A remote endpoint is unattested by definition. The coordinator
+cannot know which model answers, whether prompts are logged, or whether the token
+counts are real.
+
+So T0 ships with conditions, not just a flag:
+
+- Never routed confidential-tier traffic; `/private` keeps its own pool.
+- Settlement stays capped at the pre-agreed hold (`min(measured, reserved)`).
+- One held-out probe job per T0 node, to catch a node that reports tokens it did
+  not produce.
+- The receipt names the rung. A stranger's unmeasured box must never inherit the
+  wording reserved for an enclave.
+
+T1 is the only rung that works for someone with no spare machine, and it is the
+most expensive to build: WebGPU inference plus the frame protocol compiled to
+WASM. It also yields the least capacity per contributor, so it follows T0 rather
+than preceding it.
+
+Sequencing: T0 and T2 land with the Rust node in v0.2 (Phase 1.3), so the
+capability is written once instead of twice.
+
 ### Outcomes
 
 - `ocm -t` reports unknown directives, bad values, duplicate names, undefined
   pool references and include cycles with `file:line:column`.
-- One URL onboards a contributor end to end, no terminal archaeology.
+- One URL onboards a contributor end to end: nothing to install when they already
+  run a runtime (T0), one container when they want full capacity (T2).
 - An agent key cannot exceed its model allowlist, budget or rate.
 - A reload changes routing policy without dropping an active stream.
 - A working network no longer requires dozens of env vars.
