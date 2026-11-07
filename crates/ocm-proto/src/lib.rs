@@ -4,5 +4,5 @@
 mod body;
 mod frame;
 
-pub use body::Body;
+pub use body::{Accelerator, Body, Capabilities, DoneReason, ErrorMsg, FailCode, Heartbeat, Hello, JobCompleted, JobFailed, JobRef, JobStart, JobToken, Message, ModelInfo, Role, TokenSource, Usage, Welcome};
 pub use frame::{Frame, MAX_FRAME_BYTES, PROTOCOL_VERSION, ProtoError};
