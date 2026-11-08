@@ -91,7 +91,9 @@ try {
     Copy-Item -Path (Join-Path $tmp $asset) -Destination $target -Force
     $new = $null
     try { $new = (& $target --version 2>$null | Select-Object -First 1) } catch { }
-    if (-not $new) { $new = "ocm-node $versionNumber" }
+    if (-not $new) {
+        throw "installed $target but it did not run; delete it and report this at https://github.com/$repo/issues"
+    }
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($null -eq $userPath) { $userPath = '' }

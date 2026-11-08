@@ -148,7 +148,9 @@ if [ "$OS" = Darwin ] && command -v xattr >/dev/null 2>&1; then
 fi
 
 NEW="$("$TARGET" --version 2>/dev/null | head -n 1 || true)"
-[ -n "$NEW" ] || NEW="ocm-node $VERSION_NUM"
+if [ -z "$NEW" ]; then
+  die "installed $TARGET but it did not run; remove it and report this at https://github.com/$REPO/issues"
+fi
 
 printf '\n%s -> %s\n' "$NEW" "$TARGET"
 if [ -n "$OLD" ] && [ "$OLD" != "$NEW" ]; then
