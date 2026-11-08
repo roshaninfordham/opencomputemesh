@@ -123,21 +123,23 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
-          cat > release-notes.md <<EOF
+          # Quoted heredoc: backticks must survive. An unquoted one runs them as commands
+          # and silently strips every filename out of the notes.
+          cat > release-notes.md <<'EOF'
           ## Which file do I need?
 
           **Hosting a network** — one machine with Python 3.12+. Download both:
-          - `opencomputemesh-${version}-py3-none-any.whl` (the coordinator and `ocm-agent`)
-          - `opencomputemesh-web-${version}.zip` (the web app the coordinator serves)
+          - `opencomputemesh-@VERSION@-py3-none-any.whl` (the coordinator and `ocm-agent`)
+          - `opencomputemesh-web-@VERSION@.zip` (the web app the coordinator serves)
 
           **Sharing a machine's models** — download the one for your platform:
 
           | Your machine | Download |
           |---|---|
-          | macOS on Apple silicon | `ocm-node-${version}-macos-apple-silicon` |
-          | macOS on Intel | `ocm-node-${version}-macos-intel` |
-          | Windows 64-bit | `ocm-node-${version}-windows-x64.exe` |
-          | Linux 64-bit | `ocm-node-${version}-linux-x64` |
+          | macOS on Apple silicon | `ocm-node-@VERSION@-macos-apple-silicon` |
+          | macOS on Intel | `ocm-node-@VERSION@-macos-intel` |
+          | Windows 64-bit | `ocm-node-@VERSION@-windows-x64.exe` |
+          | Linux 64-bit | `ocm-node-@VERSION@-linux-x64` |
 
           **Just joining from a browser** — download nothing. Open the join link the host gave you.
 
@@ -145,6 +147,8 @@ jobs:
           GitHub for developers; they are not needed to run the mesh. Install steps are in the
           quick start, and the changes are in `CHANGELOG.md`.
           EOF
+          sed -i "s/@VERSION@/${version}/g" release-notes.md
+          test -s release-notes.md && grep -q "ocm-node-${version}-linux-x64" release-notes.md
 
       - uses: softprops/action-gh-release@v2
         with:
