@@ -11,6 +11,12 @@ Semantic Versioning.
   endpoints support it: `limits` on the network snapshot and `POST /api/v1/jobs/estimate`, which returns the
   exact hold submit would place before anything is sent.
 
+### Changed
+- The web app is four places instead of six. Chat is the landing page, Machines owns the node list, the
+  sharing steps and the invite link, and Activity folds usage and the ledger in beside requests and the
+  throughput chart. The Overview page is gone, and `/run`, `/nodes` and `/usage` still resolve to their
+  new pages so old links keep working.
+
 ## [0.1.3] - 2026-11-07
 
 ### Changed
