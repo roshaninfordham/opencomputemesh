@@ -433,3 +433,21 @@ def test_http_hardening(server):
     r = req.post("/api/v1/jobs", json={"model": "m1", "idempotency_key": "k" * 8,
                                        "messages": [{"role": "bogus", "content": "SECRET-PROMPT-123"}]})
     assert r.status_code == 422 and "SECRET-PROMPT-123" not in r.text
+
+
+async def test_estimate_returns_the_hold_submit_would_place(server):
+    base, app = server
+    c = member(base, "estimator")
+    body = {"model": "m1", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 50}
+    r = c.post("/api/v1/jobs/estimate", json=body)
+    assert r.status_code == 200, r.text
+    got = r.json()
+    tariff = app.state.hub.active_tariff("demo")
+    assert got["hold_micro_occ"] == ledger.cost_micro(tariff, ledger.estimate_input_tokens(body["messages"]), 50)
+    assert got["affordable"] is True
+    assert got["max_output_tokens"] == app.state.settings.max_output_tokens
+    net = c.get("/api/v1/network").json()
+    assert net["limits"]["max_prompt_chars"] == app.state.settings.max_prompt_chars
+    too_long = {**body, "messages": [{"role": "user", "content": "x" * 13_000}]}
+    assert c.post("/api/v1/jobs/estimate", json=too_long).status_code == 413
+    assert c.post("/api/v1/jobs/estimate", json={**body, "max_tokens": 99_999}).status_code >= 400

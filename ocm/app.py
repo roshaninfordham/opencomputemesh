@@ -428,6 +428,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         result = await task if task else job
         return result
 
+    @app.post("/api/v1/jobs/estimate")
+    async def estimate(body: GenerationParams, member=Depends(current_member)):
+        """The credit hold a run would place, from the same math submit uses. Creates no job."""
+        limit(f"estimate:{member['id']}", 120, 60)
+        messages = [m.model_dump() for m in body.messages]
+        chars = sum(len(m["content"]) for m in messages)
+        if chars > s.max_prompt_chars:
+            err("PROMPT_TOO_LARGE", f"Prompt exceeds {s.max_prompt_chars} characters.", 413)
+        max_tokens = body.max_tokens or s.default_max_output_tokens
+        if max_tokens > s.max_output_tokens:
+            err("MAX_TOKENS_TOO_LARGE", f"max_tokens must be <= {s.max_output_tokens}.")
+        tariff = hub.active_tariff(member["network_id"])
+        estimated = ledger.estimate_input_tokens(messages)
+        hold = ledger.cost_micro(tariff, estimated, max_tokens)
+        balance = ledger.balance(db, member["id"])
+        return {"hold_micro_occ": hold, "estimated_input_tokens": estimated, "max_tokens": max_tokens,
+                "balance_micro_occ": balance, "affordable": balance >= hold,
+                "max_prompt_chars": s.max_prompt_chars, "max_output_tokens": s.max_output_tokens,
+                "tariff_version": tariff["version"]}
+
     @app.post("/api/v1/jobs")
     async def create_job(body: JobIn, request: Request, member=Depends(current_member)):
         limit(f"req:{member['id']}", 20, 60)

@@ -5,6 +5,12 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+- Conversations in the web app: a thread stays in the browser, its history is resent with each request, and
+  every turn is an ordinary job with its own receipt. The coordinator still stores no prompt. Two read-only
+  endpoints support it: `limits` on the network snapshot and `POST /api/v1/jobs/estimate`, which returns the
+  exact hold submit would place before anything is sent.
+
 ## [0.1.3] - 2026-11-07
 
 ### Changed
