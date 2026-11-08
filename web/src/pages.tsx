@@ -174,7 +174,8 @@ function ShareCompute({ initialOpen }: { initialOpen: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(initialOpen);
   const origin = location.origin;
-  const command = `uv run ocm-agent --coordinator ${origin} --name "my-laptop"`;
+  const install = "curl -fsSL https://raw.githubusercontent.com/roshaninfordham/opencomputemesh/main/scripts/install.sh | sh";
+  const command = `${install}\nocm-node --coordinator ${origin} --name "my-laptop"`;
   const make = async () => {
     setError(null);
     try { setToken(await api("/api/v1/nodes/enrollment-tokens", { method: "POST" })); } catch (e) { setError((e as Error).message); }
@@ -196,8 +197,9 @@ function ShareCompute({ initialOpen }: { initialOpen: boolean }) {
             ) : <Button variant="quiet" onClick={make}>Create token</Button>}
             {error && <div className="mt-2"><ErrorNote>{error}</ErrorNote></div>}
           </Step>
-          <Step n={3} title="Run the agent from a checkout of this repository">
-            <div className="flex flex-wrap items-center gap-2"><code className="block grow rounded bg-paper px-3 py-2 font-mono text-[13px]">{command}</code><CopyButton text={command} /></div>
+          <Step n={3} title="Install the agent and run it">
+            <div className="flex flex-wrap items-center gap-2"><code className="block grow whitespace-pre-wrap rounded bg-paper px-3 py-2 font-mono text-[13px]">{command}</code><CopyButton text={command} /></div>
+            <p className="mt-1.5 text-xs text-muted">The installer verifies the release checksum, uses no sudo and never edits your shell config. Already have <code>ocm-node</code>? Skip the first line. On Windows, run <code>irm https://raw.githubusercontent.com/roshaninfordham/opencomputemesh/main/scripts/install.ps1 | iex</code> in PowerShell instead.</p>
             <p className="mt-1.5 text-xs text-muted">It lists your installed models and asks which to share, then asks for the token. Your node appears below within a few seconds.</p>
           </Step>
         </ol>

@@ -60,16 +60,14 @@ curl -LO $BASE/opencomputemesh-web-0.1.3.zip
 unzip -q opencomputemesh-web-0.1.3.zip -d web/dist
 uv tool install ./opencomputemesh-0.1.3-py3-none-any.whl
 OCM_WEB_DIST=./web/dist ocm serve</code></pre></div>
-    <div class="card"><h3>2. Share models</h3><p>Pull a model with Ollama, create an enrollment token under Nodes, run the binary for your OS. It dials out and opens no ports.</p>
-      <pre><code>BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.3
-curl -LO $BASE/ocm-node-0.1.3-macos-apple-silicon
-chmod +x ocm-node-0.1.3-macos-apple-silicon
-xattr -d com.apple.quarantine ocm-node-0.1.3-macos-apple-silicon
+    <div class="card"><h3>2. Share models</h3><p>Pull a model with Ollama, install the agent with one command, then point it at the network. It dials out and opens no ports.</p>
+      <pre><code>curl -fsSL https://raw.githubusercontent.com/roshaninfordham/opencomputemesh/main/scripts/install.sh | sh
 ollama pull qwen2.5:1.5b
-./ocm-node-0.1.3-macos-apple-silicon --coordinator https://your-coordinator \
-  --models qwen2.5:1.5b --name my-laptop</code></pre></div>
+ocm-node --coordinator https://your-coordinator \
+  --models qwen2.5:1.5b --name my-laptop</code></pre>
+      <p>Windows: <code>irm https://raw.githubusercontent.com/roshaninfordham/opencomputemesh/main/scripts/install.ps1 | iex</code> in PowerShell. The script verifies the release checksum and never uses sudo. Already running SIE, vLLM or LM Studio? <code>ocm-agent --runtime openai</code> shares it with no Ollama.</p></div>
     <div class="card"><h3>3. Join</h3><p>Open <code>/join/&lt;code&gt;</code> on any device. No install, no account, and joining shares no compute.</p>
-      <p>Linux uses the musl binary, Windows the <code>.exe</code>. Already running SIE, vLLM or LM Studio? <code>ocm-agent --runtime openai</code> shares it with no Ollama.</p></div>
+      <p>No install, no account, and joining shares no compute.</p></div>
   </div>
 
   <h2>What it does</h2>

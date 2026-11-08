@@ -79,12 +79,16 @@ unzipped). Without it, the API works and the UI answers 404.
 
 ```bash
 # macOS / Linux
-chmod +x ocm-node-0.1.3-macos-apple-silicon
-./ocm-node-0.1.3-macos-apple-silicon --help
+curl -fsSL https://raw.githubusercontent.com/roshaninfordham/opencomputemesh/main/scripts/install.sh | sh
+ocm-node --help
 ```
 
-The Windows `.exe` runs directly. It still needs a model runtime on the same machine
-(Ollama), because the node talks to it over loopback.
+Windows PowerShell: `irm .../scripts/install.ps1 | iex`. The scripts resolve the latest tag and check
+`SHA256SUMS.txt`, so they contain no version number and do not join the five-place bump. They install
+under the user's home (`%LOCALAPPDATA%` on Windows) and never use `sudo`.
+
+The binary still needs a model runtime on the same machine (Ollama), because the node talks to it
+over loopback.
 
 ## Unsigned binaries: say this out loud
 
@@ -110,6 +114,12 @@ A version lives in five places and all five must agree, or a `--locked` install 
 5. `web/package.json` and `web/package-lock.json` → both version fields
 
 Also add the `CHANGELOG.md` section named exactly `## [<version>] - <date>`.
+
+## After publishing
+
+Run the installer against the new tag on a Linux box and a Mac (`OCM_VERSION=vX.Y.Z`) and check that
+`ocm-node --version` prints it. The scripts resolve `latest`, so an incomplete upload breaks the install
+path before it breaks anything else.
 
 ## Desktop app (Tauri): planned, not built
 
