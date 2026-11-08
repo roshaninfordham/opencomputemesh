@@ -305,6 +305,8 @@ class Hub:
             "models": self.available_models(network_id),
             "nodes": [self.public_node(n, viewer_member_id) for n in nodes],
             "activity": activity,
+            "limits": {"max_prompt_chars": self.s.max_prompt_chars,
+                       "max_output_tokens": self.s.max_output_tokens},
             "demo_mode": self.s.demo_mode,
         }
 

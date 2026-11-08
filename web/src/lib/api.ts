@@ -13,6 +13,7 @@ export type Activity = { occurred_at: string; event_type: string; job_id: string
 export type Network = {
   id?: string; name: string; online_node_count: number; node_count?: number; member_count: number; demo_mode: boolean;
   models: NetModel[]; nodes?: NodeView[]; activity?: Activity[];
+  limits?: { max_prompt_chars: number; max_output_tokens: number };
 };
 export type LedgerEntry = { id: number; entry_type: string; amount_micro_occ: number; created_at: string; nickname?: string; job_id?: string | null; model_id?: string | null };
 export type Receipt = {
@@ -41,6 +42,12 @@ export type Benchmark = { id: string; model_id: string; model_digest: string | n
 export type ThroughputBucket = { bucket: string; model_id: string; jobs: number; completed: number; input_tokens: number | null; output_tokens: number | null;
   avg_ttft_ms: number | null; p95_ttft_ms: number | null; avg_e2e_ms: number | null; p95_e2e_ms: number | null; avg_tokens_per_second: number | null };
 export type Throughput = { enabled: false } | { enabled: true; source: string; minutes: number; buckets: ThroughputBucket[]; buffered_rows: number; dropped_rows: number };
+
+/** The hold a run would place, from the coordinator's own tariff math. */
+export type Hold = {
+  hold_micro_occ: number; estimated_input_tokens: number; max_tokens: number; balance_micro_occ: number;
+  affordable: boolean; max_prompt_chars: number; max_output_tokens: number; tariff_version: string;
+};
 
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number, public details?: unknown) { super(message); }

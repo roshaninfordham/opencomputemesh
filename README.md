@@ -24,6 +24,8 @@ dials out, so there are no ports to open and nothing to install to ask for a tok
 ## What runs today
 
 - **Coordinator, web app, Python agent.** 97 tests pass; 3 skip without the optional extras or a live Ollama.
+- **Conversations.** Follow-ups keep their thread in the browser and resend it with the next request. Each
+  turn is an ordinary job with its own receipt, and the coordinator still stores no prompt.
 - **`ocm-node` (Rust).** Same flags and state file as the Python agent, Ollama runtime only. Binaries for macOS (ARM and Intel), Windows x64 and Linux.
 - **Runtimes.** Ollama on loopback by default; `--runtime openai` for SIE, vLLM, LM Studio, llama.cpp or TGI; `--runtime gemini`; an opted-in remote runtime. The Rust agent does Ollama only.
 - **Tinfoil attested tier.** The gateway was verified against a live enclave with the fingerprint pinned. It is not deployed: that needs our Tinfoil organization, so there is no public URL yet.

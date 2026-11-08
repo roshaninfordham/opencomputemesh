@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, occ, type Member } from "./lib/api";
 import { MeshProvider, useMesh } from "./lib/mesh";
-import { ActivityPage, JoinPage, Logo, NodesPage, Overview, RunPage, SettingsPage, UsagePage, type Go } from "./pages";
+import { ActivityPage, JoinPage, Logo, NodesPage, Overview, SettingsPage, UsagePage, type Go } from "./pages";
+import { RunPage } from "./chat";
 
-const NAV = [["/", "Overview"], ["/run", "Run a model"], ["/nodes", "Nodes"], ["/usage", "My usage"], ["/activity", "Requests"], ["/settings", "Settings"]] as const;
+const NAV = [["/", "Overview"], ["/run", "Chat"], ["/nodes", "Nodes"], ["/usage", "My usage"], ["/activity", "Requests"], ["/settings", "Settings"]] as const;
 
 function usePath(): [string, Go] {
   const [path, setPath] = useState(location.pathname + location.search);
