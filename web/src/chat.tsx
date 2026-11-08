@@ -3,6 +3,7 @@ import { api, occ, type Hold, type Member } from "./lib/api";
 import { useMesh } from "./lib/mesh";
 import { buildMessages, loadThreads, newThread, saveThreads, titleFor, type Thread, type Turn } from "./lib/threads";
 import { Button, Empty, ErrorNote, ReceiptView } from "./components";
+import { PageHeader } from "./pages";
 
 const CONSENT_KEY = "ocm-consent-v1";
 const MAX_TURNS = 40;
@@ -127,25 +128,28 @@ export function RunPage({ member, initialModel, go }: { member: Member; initialM
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Chat</h1>
-          <p className="mt-1 max-w-[70ch] text-muted">Follow-ups are resent with the next request. History stays in this browser; the coordinator stores no prompt.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select aria-label="Conversation" value={thread.id} disabled={busy} onChange={(e) => setActiveId(e.target.value)}
-            className="max-w-[14rem] rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm">
-            {threads.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-          </select>
-          <Button variant="quiet" onClick={startNew} disabled={busy}>New chat</Button>
-        </div>
-      </header>
+      <PageHeader
+        title={network?.name ?? "Chat"}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <select aria-label="Conversation" value={thread.id} disabled={busy} onChange={(e) => setActiveId(e.target.value)}
+              className="max-w-[14rem] rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm">
+              {threads.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+            </select>
+            <Button variant="quiet" onClick={startNew} disabled={busy}>New chat</Button>
+          </div>
+        }
+      >
+        {network
+          ? `${network.online_node_count} of ${network.node_count ?? network.online_node_count} computers online · ${network.member_count} ${network.member_count === 1 ? "person" : "people"} joined. Follow-ups are resent with each turn; history stays in this browser and the coordinator stores no prompt.`
+          : "Connecting…"}
+      </PageHeader>
 
       <section aria-label="Conversation" className="space-y-6 rounded-lg border border-line bg-surface p-4 md:p-5">
         {thread.turns.length === 0 ? (
           <Empty>
             Ask a question to start. The answer streams back with a receipt you can open under it.
-            {!models.length && <> Nobody is sharing a model right now — <button className="text-mesh underline" onClick={() => go("/nodes?share=1")}>share your compute</button> to get started.</>}
+            {!models.length && <> Nobody is sharing a model right now — <button className="text-mesh underline" onClick={() => go("/machines?share=1")}>share your compute</button> to get started.</>}
           </Empty>
         ) : thread.turns.map((turn) => (
           <div key={turn.id} className={turn.role === "user" ? "flex justify-end" : ""}>

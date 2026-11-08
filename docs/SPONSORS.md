@@ -115,7 +115,7 @@ No extra dependency is needed (it uses `httpx`). `OCM_RUNTIME=gemini` is the sam
 
 ### What it does
 
-When `OCM_TIMESCALE_URL` is set, the coordinator copies one metrics row for every terminal job (completed, failed, cancelled or expired) into a TimescaleDB hypertable. A continuous aggregate rolls those rows up per minute, network and model. `GET /api/v1/network/throughput` reads the aggregate and the Overview page draws it as "Throughput (last hour)".
+When `OCM_TIMESCALE_URL` is set, the coordinator copies one metrics row for every terminal job (completed, failed, cancelled or expired) into a TimescaleDB hypertable. A continuous aggregate rolls those rows up per minute, network and model. `GET /api/v1/network/throughput` reads the aggregate and the Activity page draws it as "Throughput (last hour)".
 
 ### Why it fits
 
@@ -129,7 +129,7 @@ flowchart LR
   BUF -->|"background writer<br/>batches of 500<br/>ON CONFLICT DO NOTHING"| HT[("hypertable<br/>ocm_job_metrics<br/>1-day chunks,<br/>compressed after 7 days")]
   HT -->|"refresh policy every minute<br/>+ real-time aggregation"| CA[("continuous aggregate<br/>ocm_job_metrics_1m")]
   CA -->|"SELECT ... WHERE network_id<br/>AND bucket >= now() - minutes"| EP["GET /api/v1/network/throughput"]
-  EP --> UI["Overview page<br/>Throughput (last hour)"]
+  EP --> UI["Activity page<br/>Throughput (last hour)"]
 ```
 
 ### Code

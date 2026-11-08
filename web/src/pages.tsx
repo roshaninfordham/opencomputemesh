@@ -23,6 +23,19 @@ function useTick(interval: number | null) {
   }, [interval]);
 }
 
+/** One page heading, so titles, descriptions and actions line up across pages. */
+export function PageHeader({ title, children, action }: { title: string; children?: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {children && <p className="mt-1 max-w-[75ch] text-muted">{children}</p>}
+      </div>
+      {action}
+    </header>
+  );
+}
+
 /* ---------------- Join ---------------- */
 
 export function JoinPage({ code, onJoined }: { code: string; onJoined: (m: Member) => void }) {
@@ -82,94 +95,9 @@ export function Logo() {
   );
 }
 
-/* ---------------- Overview ---------------- */
+/* ---------------- Machines ---------------- */
 
-const EVENT_TEXT: Record<string, string> = { accepted: "submitted", dispatched: "dispatched to", first_token: "first token from", completed: "completed on", failed: "failed", cancelled: "cancelled", credit_settled: "settled credits for" };
-
-export function Overview({ member, go }: { member: Member; go: Go }) {
-  const { network } = useMesh();
-  const { data: ledger } = useFetch<Ledger>("/api/v1/me/ledger?limit=5", [network]);
-  const { data: usage } = useFetch<Usage>("/api/v1/me/usage", [network]);
-  const { data: invite } = useFetch<{ join_path: string }>("/api/v1/network/join-info");
-  const { data: throughput, error: throughputError } = useFetch<Throughput>("/api/v1/network/throughput?minutes=60", [network]);
-  const inviteUrl = invite ? `${location.origin}${invite.join_path}` : "";
-  return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{network?.name ?? "Network"}</h1>
-          <p className="mt-1 text-muted">{network ? `${network.online_node_count} of ${network.node_count} computers online, ${network.member_count} people joined` : "Connecting…"}</p>
-        </div>
-        <Button onClick={() => go("/run")} className="px-5 py-2.5">Open chat</Button>
-      </header>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Panel title="Models available now" className="lg:col-span-2">
-          {network?.models.length ? (
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted"><tr><th className="pb-2 font-normal">Model</th><th className="pb-2 font-normal">Size</th><th className="pb-2 font-normal">Workers</th><th /></tr></thead>
-              <tbody>{network.models.map((m) => (
-                <tr key={m.model_id} className="border-t border-line">
-                  <td className="py-2.5 font-medium">{m.model_id}</td>
-                  <td className="py-2.5 text-muted">{[m.parameter_size, m.quantization].filter(Boolean).join(", ") || "—"}</td>
-                  <td className="py-2.5">{m.worker_count}</td>
-                  <td className="py-2.5 text-right"><button className="text-mesh hover:underline" onClick={() => go(`/run?model=${encodeURIComponent(m.model_id)}`)}>Use</button></td>
-                </tr>))}</tbody>
-            </table>
-          ) : <Empty>Nobody is sharing a model right now. <button className="text-mesh underline" onClick={() => go("/nodes")}>Share your compute</button> to get things started.</Empty>}
-        </Panel>
-        <Panel title="Invite people">
-          {inviteUrl ? (
-            <div className="flex flex-col items-center gap-3">
-              <Qr text={inviteUrl} />
-              <p className="break-all text-center text-xs text-muted">{inviteUrl}</p>
-              <CopyButton text={inviteUrl} label="Copy invite link" />
-            </div>
-          ) : <p className="text-sm text-muted">Loading invite…</p>}
-        </Panel>
-        <Panel title="Your credits" action={<button className="text-sm text-mesh hover:underline" onClick={() => go("/usage")}>Ledger</button>}>
-          <p className="text-3xl font-semibold">{occ(ledger?.balance_micro_occ ?? member.balance_micro_occ)} <span className="text-base font-normal text-muted">OCC</span></p>
-          <ul className="mt-3 space-y-1.5 text-sm">
-            {ledger?.entries.map((e) => <li key={e.id} className="flex justify-between gap-3"><span className="text-muted">{entryLabel(e.entry_type)}</span><span>{e.amount_micro_occ > 0 ? "+" : ""}{occ(e.amount_micro_occ)}</span></li>)}
-          </ul>
-        </Panel>
-        <Panel title="You gave and used">
-          {usage ? (
-            <dl className="grid grid-cols-2 gap-4">
-              <Metric label="Jobs you served" value={usage.contributed.total.jobs} />
-              <Metric label="Jobs you ran" value={usage.consumed.total.jobs} />
-              <Metric label="Tokens you processed" value={(usage.contributed.total.input_tokens + usage.contributed.total.output_tokens).toLocaleString()} />
-              <Metric label="Tokens you used" value={(usage.consumed.total.input_tokens + usage.consumed.total.output_tokens).toLocaleString()} />
-            </dl>
-          ) : <p className="text-sm text-muted">Loading…</p>}
-        </Panel>
-        <Panel title="Live activity">
-          {network?.activity?.length ? (
-            <ol className="space-y-2 text-sm">
-              {network.activity.slice(0, 8).map((a, i) => (
-                <li key={i} className="flex gap-2"><span className="w-[4.5rem] shrink-0 text-xs leading-5 whitespace-nowrap text-muted">{new Date(a.occurred_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-                  <span><span className="font-medium">{a.requester_nickname}</span>'s {a.model_id} request {EVENT_TEXT[a.event_type] ?? a.event_type}{a.node_name && ["dispatched", "first_token", "completed", "credit_settled"].includes(a.event_type) ? <> <span className="font-medium">{a.node_name}</span></> : null}</span></li>))}
-            </ol>
-          ) : <Empty>No requests yet.</Empty>}
-        </Panel>
-        {throughputError ? <Panel title="Throughput (last hour)" className="lg:col-span-3"><p className="text-sm text-muted">Time-series metrics unavailable: {throughputError}</p></Panel>
-          : throughput?.enabled ? (
-          <Panel title="Throughput (last hour)" className="lg:col-span-3">
-            <ThroughputChart buckets={throughput.buckets} minutes={throughput.minutes} />
-            <p className="mt-2 text-xs text-muted">From Tiger Data continuous aggregate <code>ocm_job_metrics_1m</code></p>
-          </Panel>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-export function entryLabel(t: string) {
-  return ({ demo_grant: "Demo grant", reservation: "Hold placed", reservation_release: "Hold released", job_debit: "Paid for a request", provider_reward: "Earned serving a request", reversal: "Reversal", adjustment: "Adjustment" } as Record<string, string>)[t] ?? t;
-}
-
-/* ---------------- Nodes ---------------- */
-
-export function NodesPage({ share = false }: { share?: boolean }) {
+export function MachinesPage({ share = false }: { share?: boolean }) {
   const { network } = useMesh();
   useTick(5000);
   const nodes = network?.nodes ?? [];
@@ -183,7 +111,8 @@ export function NodesPage({ share = false }: { share?: boolean }) {
   };
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Nodes</h1>
+      <PageHeader title="Machines">Computers sharing models with this network. A browser can join without sharing anything; a machine is added with a small agent.</PageHeader>
+      <InvitePanel />
       <ShareCompute initialOpen={share} />
       {error && <ErrorNote>{error}</ErrorNote>}
       {nodes.length === 0 ? <Empty>No computers have joined yet.</Empty> : (
@@ -214,6 +143,25 @@ export function NodesPage({ share = false }: { share?: boolean }) {
         </div>
       )}
     </div>
+  );
+}
+
+function InvitePanel() {
+  const { data: invite } = useFetch<{ join_path: string }>("/api/v1/network/join-info");
+  const inviteUrl = invite ? `${location.origin}${invite.join_path}` : "";
+  return (
+    <Panel title="Invite people">
+      {inviteUrl ? (
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+          <Qr text={inviteUrl} size={132} />
+          <div className="min-w-0 space-y-2">
+            <p className="break-all text-sm text-muted">{inviteUrl}</p>
+            <CopyButton text={inviteUrl} label="Copy invite link" />
+            <p className="text-xs text-muted">Opens the join page in any browser. Joining from a browser shares no compute.</p>
+          </div>
+        </div>
+      ) : <p className="text-sm text-muted">Loading invite…</p>}
+    </Panel>
   );
 }
 
@@ -262,31 +210,74 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   return <li className="grid grid-cols-[1.75rem_1fr] gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full border border-line text-xs font-semibold">{n}</span><div><p className="mb-2 font-medium">{title}</p>{children}</div></li>;
 }
 
-/* ---------------- Usage ---------------- */
+/* ---------------- Activity ---------------- */
 
-export function UsagePage() {
+export function ActivityPage({ member }: { member: Member }) {
+  const { network } = useMesh();
+  const { data, error } = useFetch<{ jobs: Receipt[] }>("/api/v1/jobs?limit=50", [network]);
+  const { data: throughput, error: throughputError } = useFetch<Throughput>("/api/v1/network/throughput?minutes=60", [network]);
+  const [open, setOpen] = useState<string | null>(null);
+  const jobs = useMemo(() => data?.jobs ?? [], [data]);
+  return (
+    <div className="space-y-8">
+      <PageHeader title="Activity">Requests you ran and requests your nodes served, what moved in your ledger, and the last hour&apos;s throughput. Prompts and outputs are not stored.</PageHeader>
+      <section aria-labelledby="requests-heading" className="space-y-3">
+        <h2 id="requests-heading" className="text-lg font-semibold">Requests</h2>
+        {error && <ErrorNote>{error}</ErrorNote>}
+        {jobs.length === 0 ? <Empty>No requests yet.</Empty> : (
+          <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+            {jobs.map((j) => (
+              <li key={j.request_id}>
+                <button className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left hover:bg-paper" onClick={() => setOpen(open === j.request_id ? null : j.request_id)} aria-expanded={open === j.request_id}>
+                  <span><span className="font-medium">{j.model_id}</span> <span className="text-sm text-muted">{j.requester_nickname === member.nickname ? "you ran" : `${j.requester_nickname} ran`} on {j.node?.display_name ?? "no worker"}{j.kind !== "request" ? ` (${j.kind.replace("_", " ")})` : ""}</span></span>
+                  <span className="flex items-center gap-4 text-sm"><span className="text-muted">{j.tokens.total !== null ? `${j.tokens.total} tokens` : ""}</span><span className="text-muted">{ms(j.timings_ms.coordinator_end_to_end)}</span><StatusText s={j.status} code={j.failure_code} /></span>
+                </button>
+                {open === j.request_id && <div className="border-t border-line px-4 py-4"><ReceiptView r={j} /></div>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <Credits />
+      {throughputError ? <Panel title="Throughput (last hour)"><p className="text-sm text-muted">Time-series metrics unavailable: {throughputError}</p></Panel>
+        : throughput?.enabled ? (
+        <Panel title="Throughput (last hour)">
+          <ThroughputChart buckets={throughput.buckets} minutes={throughput.minutes} />
+          <p className="mt-2 text-xs text-muted">From Tiger Data continuous aggregate <code>ocm_job_metrics_1m</code></p>
+        </Panel>
+      ) : null}
+    </div>
+  );
+}
+
+function Credits() {
   const { network } = useMesh();
   const { data: ledger, error } = useFetch<Ledger>("/api/v1/me/ledger?limit=100", [network]);
   const { data: usage } = useFetch<Usage>("/api/v1/me/usage", [network]);
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">My usage</h1>
-      {error && <ErrorNote>{error}</ErrorNote>}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {usage && (["contributed", "consumed"] as const).map((side) => (
-          <Panel key={side} title={side === "contributed" ? "Compute you contributed" : "Compute you used"}>
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Metric label="Jobs" value={`${usage[side].total.completed} of ${usage[side].total.jobs} completed`} />
-              <Metric label="Input tokens" value={usage[side].total.input_tokens.toLocaleString()} hint="Runtime-reported" />
-              <Metric label="Output tokens" value={usage[side].total.output_tokens.toLocaleString()} hint="Runtime-reported" />
-              <Metric label="Worker execution time" value={ms(usage[side].total.worker_ms) ?? "0 ms"} hint="Wall time measured by the node agent" />
-              <Metric label={side === "contributed" ? "Credits earned" : "Credits spent"} value={`${occ(usage[side].total.settled_micro_occ)} OCC`} />
-            </dl>
-            {side === "contributed" && <p className="mt-3 text-xs text-muted">{usage.contributed.note}</p>}
-          </Panel>
-        ))}
+    <section id="credits" aria-labelledby="credits-heading" className="scroll-mt-6 space-y-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="credits-heading" className="text-lg font-semibold">Credits</h2>
+        {ledger && <p className="text-sm text-muted">Balance <span className="font-medium text-ink">{occ(ledger.balance_micro_occ)} OCC</span></p>}
       </div>
-      <Panel title={<>Ledger <span className="font-normal text-muted">balance {occ(ledger?.balance_micro_occ)} OCC</span></>}>
+      {error && <ErrorNote>{error}</ErrorNote>}
+      {usage && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {(["contributed", "consumed"] as const).map((side) => (
+            <Panel key={side} title={side === "contributed" ? "Compute you contributed" : "Compute you used"}>
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Metric label="Jobs" value={`${usage[side].total.completed} of ${usage[side].total.jobs} completed`} />
+                <Metric label="Input tokens" value={usage[side].total.input_tokens.toLocaleString()} hint="Runtime-reported" />
+                <Metric label="Output tokens" value={usage[side].total.output_tokens.toLocaleString()} hint="Runtime-reported" />
+                <Metric label="Worker execution time" value={ms(usage[side].total.worker_ms) ?? "0 ms"} hint="Wall time measured by the node agent" />
+                <Metric label={side === "contributed" ? "Credits earned" : "Credits spent"} value={`${occ(usage[side].total.settled_micro_occ)} OCC`} />
+              </dl>
+              {side === "contributed" && <p className="mt-3 text-xs text-muted">{usage.contributed.note}</p>}
+            </Panel>
+          ))}
+        </div>
+      )}
+      <Panel title="Ledger">
         {ledger && <p className="mb-4 max-w-[80ch] text-sm text-muted">{ledger.explanation} Tariff {ledger.tariff.version}: {ledger.tariff.input_occ_per_1k} OCC per 1k input tokens, {ledger.tariff.output_occ_per_1k} per 1k output tokens ({ledger.tariff.label}).</p>}
         {ledger?.entries.length ? (
           <div className="overflow-x-auto">
@@ -303,37 +294,12 @@ export function UsagePage() {
           </div>
         ) : <Empty>No ledger entries.</Empty>}
       </Panel>
-    </div>
+    </section>
   );
 }
 
-/* ---------------- Activity ---------------- */
-
-export function ActivityPage({ member }: { member: Member }) {
-  const { network } = useMesh();
-  const { data, error } = useFetch<{ jobs: Receipt[] }>("/api/v1/jobs?limit=50", [network]);
-  const [open, setOpen] = useState<string | null>(null);
-  const jobs = useMemo(() => data?.jobs ?? [], [data]);
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Requests</h1>
-      <p className="text-sm text-muted">Requests you ran, and requests your nodes served. Prompts and outputs are not stored.</p>
-      {error && <ErrorNote>{error}</ErrorNote>}
-      {jobs.length === 0 ? <Empty>No requests yet.</Empty> : (
-        <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
-          {jobs.map((j) => (
-            <li key={j.request_id}>
-              <button className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left hover:bg-paper" onClick={() => setOpen(open === j.request_id ? null : j.request_id)} aria-expanded={open === j.request_id}>
-                <span><span className="font-medium">{j.model_id}</span> <span className="text-sm text-muted">{j.requester_nickname === member.nickname ? "you ran" : `${j.requester_nickname} ran`} on {j.node?.display_name ?? "no worker"}{j.kind !== "request" ? ` (${j.kind.replace("_", " ")})` : ""}</span></span>
-                <span className="flex items-center gap-4 text-sm"><span className="text-muted">{j.tokens.total !== null ? `${j.tokens.total} tokens` : ""}</span><span className="text-muted">{ms(j.timings_ms.coordinator_end_to_end)}</span><StatusText s={j.status} code={j.failure_code} /></span>
-              </button>
-              {open === j.request_id && <div className="border-t border-line px-4 py-4"><ReceiptView r={j} /></div>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+export function entryLabel(t: string) {
+  return ({ demo_grant: "Demo grant", reservation: "Hold placed", reservation_release: "Hold released", job_debit: "Paid for a request", provider_reward: "Earned serving a request", reversal: "Reversal", adjustment: "Adjustment" } as Record<string, string>)[t] ?? t;
 }
 
 function StatusText({ s, code }: { s: string; code: string | null }) {
@@ -349,7 +315,7 @@ export function SettingsPage({ member, onLeft }: { member: Member; onLeft: () =>
   const curl = `curl ${location.origin}/v1/chat/completions -H "Authorization: Bearer ${key ?? "<api key>"}" -H "content-type: application/json" -d '{"model":"qwen2.5:1.5b","messages":[{"role":"user","content":"hi"}]}'`;
   return (
     <div className="max-w-3xl space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <PageHeader title="Settings">Everything that is not the network itself: your API access and how to leave.</PageHeader>
       <Panel title="API access">
         <p className="text-sm text-muted">Call the network from scripts with an OpenAI-style, non-streaming <code className="font-mono">/v1/chat/completions</code> endpoint. Usage is charged to you like web requests.</p>
         {key ? <div className="mt-3 flex flex-wrap items-center gap-2"><code className="rounded bg-paper px-3 py-2 font-mono text-[13px] break-all">{key}</code><CopyButton text={key} /><span className="text-xs text-muted">Shown once.</span></div>

@@ -17,6 +17,17 @@ export function NodeStatus({ status }: { status: string }) {
   return <span className="inline-flex items-center gap-1.5 text-sm"><span aria-hidden className={`h-2 w-2 rounded-full ${STATUS[status] ?? "bg-seg-queue"}`} />{label}</span>;
 }
 
+/** The one place the connection state is drawn; layout only decides whether the label shows. */
+export function MeshStatus({ connected, showLabel = false }: { connected: boolean; showLabel?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-good" : "bg-warn"}`} />
+      {showLabel ? <span className="text-xs text-muted">{connected ? "Live" : "Reconnecting…"}</span>
+        : <span className="sr-only">{connected ? "Live" : "Reconnecting"}</span>}
+    </span>
+  );
+}
+
 export function Panel({ title, action, children, className = "" }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={`rounded-lg border border-line bg-surface ${className}`}>
