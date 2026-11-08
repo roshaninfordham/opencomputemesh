@@ -50,10 +50,10 @@ trigger this workflow.
 
 | Artifact | Who it is for |
 |---|---|
-| `ocm-node-<version>-aarch64-apple-darwin` | Apple silicon Mac, sharing compute |
-| `ocm-node-<version>-x86_64-apple-darwin` | Intel Mac, sharing compute |
-| `ocm-node-<version>-x86_64-pc-windows-msvc.exe` | Windows x64, sharing compute |
-| `ocm-node-<version>-x86_64-unknown-linux-musl` | Linux x64, static, no glibc version problem |
+| `ocm-node-<version>-macos-apple-silicon` | Apple silicon Mac, sharing compute |
+| `ocm-node-<version>-macos-intel` | Intel Mac, sharing compute |
+| `ocm-node-<version>-windows-x64.exe` | Windows x64, sharing compute |
+| `ocm-node-<version>-linux-x64` | Linux x64, static, no glibc version problem |
 | `opencomputemesh-<version>-py3-none-any.whl` | Coordinator (`ocm serve`) and Python agent (`ocm-agent`) on macOS, Windows and Linux |
 | `opencomputemesh-web-<version>.zip` | The built web UI, for a coordinator that serves it |
 | `SHA256SUMS.txt` | Verify before you run anything |
@@ -79,8 +79,8 @@ unzipped). Without it, the API works and the UI answers 404.
 
 ```bash
 # macOS / Linux
-chmod +x ocm-node-0.1.3-aarch64-apple-darwin
-./ocm-node-0.1.3-aarch64-apple-darwin --help
+chmod +x ocm-node-0.1.3-macos-apple-silicon
+./ocm-node-0.1.3-macos-apple-silicon --help
 ```
 
 The Windows `.exe` runs directly. It still needs a model runtime on the same machine

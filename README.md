@@ -56,16 +56,17 @@ macOS builds are unsigned, so clear the quarantine bit first.
 
 ```bash
 BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.3
-curl -LO $BASE/ocm-node-0.1.3-aarch64-apple-darwin
-chmod +x ocm-node-0.1.3-aarch64-apple-darwin
-xattr -d com.apple.quarantine ocm-node-0.1.3-aarch64-apple-darwin
+curl -LO $BASE/ocm-node-0.1.3-macos-apple-silicon
+chmod +x ocm-node-0.1.3-macos-apple-silicon
+xattr -d com.apple.quarantine ocm-node-0.1.3-macos-apple-silicon
 ollama pull qwen2.5:1.5b
-./ocm-node-0.1.3-aarch64-apple-darwin \
+./ocm-node-0.1.3-macos-apple-silicon \
   --coordinator https://your-coordinator \
   --models qwen2.5:1.5b --name my-laptop
 ```
 
-Linux uses the musl binary, Windows the `.exe`, with the same flags. The Python agent is the
+Every binary is named for the machine it runs on: `macos-intel`, `windows-x64` and `linux-x64`
+(a static build, so the glibc version does not matter). Same flags on all of them. The Python agent is the
 alternative: `ocm-agent --coordinator https://your-coordinator --models qwen2.5:1.5b`.
 
 Already serving SIE, vLLM or LM Studio? `ocm-agent --runtime openai --base-url http://127.0.0.1:8080`
