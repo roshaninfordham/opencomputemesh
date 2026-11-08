@@ -6,6 +6,10 @@ Semantic Versioning.
 ## [Unreleased]
 
 ### Added
+- **One-command install for the node.** `scripts/install.sh` (macOS, Linux) and `scripts/install.ps1`
+  (Windows) pick the right `ocm-node` build, check it against the release's `SHA256SUMS.txt`, install it
+  under the user's home and print the command to join. They resolve the latest tag themselves, use no
+  `sudo`, and never edit shell config.
 - Conversations in the web app: a thread stays in the browser, its history is resent with each request, and
   every turn is an ordinary job with its own receipt. The coordinator still stores no prompt. Two read-only
   endpoints support it: `limits` on the network snapshot and `POST /api/v1/jobs/estimate`, which returns the
@@ -16,6 +20,8 @@ Semantic Versioning.
   sharing steps and the invite link, and Activity folds usage and the ledger in beside requests and the
   throughput chart. The Overview page is gone, and `/run`, `/nodes` and `/usage` still resolve to their
   new pages so old links keep working.
+- The README, landing page and the Machines page start sharing with that one command instead of naming a
+  versioned download by hand.
 
 ## [0.1.3] - 2026-11-07
 

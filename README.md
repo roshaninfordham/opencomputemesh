@@ -23,7 +23,7 @@ dials out, so there are no ports to open and nothing to install to ask for a tok
 
 ## What runs today
 
-- **Coordinator, web app, Python agent.** 97 tests pass; 3 skip without the optional extras or a live Ollama.
+- **Coordinator, web app, Python agent.** 107 tests pass; 3 skip without the optional extras or a live Ollama.
 - **Conversations.** Follow-ups keep their thread in the browser and resend it with the next request. Each
   turn is an ordinary job with its own receipt, and the coordinator still stores no prompt.
 - **`ocm-node` (Rust).** Same flags and state file as the Python agent, Ollama runtime only. Binaries for macOS (ARM and Intel), Windows x64 and Linux.
@@ -50,24 +50,31 @@ OCM_WEB_DIST=./web/dist ocm serve
 
 It prints `Join path: /join/<code>` and binds `127.0.0.1:8000` unless you set `OCM_HOST`.
 
-**2. Share your models.** Install [Ollama](https://ollama.com), pull a model, create an enrollment
-token under Nodes in the web app, then run the binary for your OS. It dials out and opens no ports;
-macOS builds are unsigned, so clear the quarantine bit first.
+**2. Share your models.** Install [Ollama](https://ollama.com), pull a model, then install the agent
+with one command. It dials out and opens no ports.
 
 ```bash
-BASE=https://github.com/roshaninfordham/opencomputemesh/releases/download/v0.1.3
-curl -LO $BASE/ocm-node-0.1.3-macos-apple-silicon
-chmod +x ocm-node-0.1.3-macos-apple-silicon
-xattr -d com.apple.quarantine ocm-node-0.1.3-macos-apple-silicon
+curl -fsSL https://raw.githubusercontent.com/roshaninfordham/opencomputemesh/main/scripts/install.sh | sh
 ollama pull qwen2.5:1.5b
-./ocm-node-0.1.3-macos-apple-silicon \
-  --coordinator https://your-coordinator \
-  --models qwen2.5:1.5b --name my-laptop
+ocm-node --coordinator https://your-coordinator --models qwen2.5:1.5b --name my-laptop
 ```
 
-Every binary is named for the machine it runs on: `macos-intel`, `windows-x64` and `linux-x64`
-(a static build, so the glibc version does not matter). Same flags on all of them. The Python agent is the
-alternative: `ocm-agent --coordinator https://your-coordinator --models qwen2.5:1.5b`.
+Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/roshaninfordham/opencomputemesh/main/scripts/install.ps1 | iex
+```
+
+The installer picks the build for the machine, verifies it against the release's `SHA256SUMS.txt`, puts
+it in `~/.local/bin` (Windows: `%LOCALAPPDATA%\Programs\ocm-node`) and prints the command to run. It never
+uses `sudo`, never edits your shell config, and if the directory is not on `PATH` it prints the line to
+add. Create the enrollment token under Machines → Share my compute when the agent asks for it. The binary
+is unsigned: macOS accepts the curl download, Windows SmartScreen may warn once. Pin a release with
+`OCM_VERSION=v0.1.3`, or skip the script and take the file for the machine from
+[the latest release](https://github.com/roshaninfordham/opencomputemesh/releases):
+`macos-apple-silicon`, `macos-intel`, `linux-x64` (static, so the glibc version does not matter) and
+`windows-x64.exe`. There is no Linux arm64 build yet; the Python agent runs there via `uv`, or build from
+source.
 
 Already serving SIE, vLLM or LM Studio? `ocm-agent --runtime openai --base-url http://127.0.0.1:8080`
 shares it with no Ollama involved. A non-loopback runtime is refused unless the owner passes
